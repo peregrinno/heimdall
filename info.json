@@ -1,0 +1,7 @@
+{
+  "participants": ["Luan Lima"],
+  "social": ["https://github.com/peregrinno"],
+  "source-code-repo": "https://github.com/peregrinno/heimdall",
+  "stack": ["go", "nginx", "haproxy", "docker"],
+  "open_to_work": true
+}
