@@ -110,14 +110,33 @@ func httpStatusClass(code int) string {
 	}
 }
 
-// DefaultServer retorna servidor com timeouts defensivos (camada HTTP).
-func DefaultServer(addr string, h http.Handler) *http.Server {
+type ServerTimeouts struct {
+	ReadHeader time.Duration
+	Read       time.Duration
+	Write      time.Duration
+	Idle       time.Duration
+}
+
+func DefaultServerTimeouts() ServerTimeouts {
+	return ServerTimeouts{
+		ReadHeader: 5 * time.Second,
+		Read:       120 * time.Second,
+		Write:      120 * time.Second,
+		Idle:       60 * time.Second,
+	}
+}
+
+func NewServer(addr string, h http.Handler, t ServerTimeouts) *http.Server {
 	return &http.Server{
 		Addr:              addr,
 		Handler:           h,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: t.ReadHeader,
+		ReadTimeout:       t.Read,
+		WriteTimeout:      t.Write,
+		IdleTimeout:       t.Idle,
 	}
+}
+
+func DefaultServer(addr string, h http.Handler) *http.Server {
+	return NewServer(addr, h, DefaultServerTimeouts())
 }

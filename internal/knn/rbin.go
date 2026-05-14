@@ -1,13 +1,13 @@
 package knn
 
 import (
-	"encoding/binary"
 	"math"
 	"os"
 	"runtime"
 	"sort"
 	"strconv"
 	"sync"
+	"unsafe"
 
 	"heimdall/internal/reference"
 )
@@ -19,25 +19,25 @@ type rbinCand struct {
 
 func rowDist2RBin(q *[reference.VectorDim]float64, body []byte, stride, i int) (float64, bool) {
 	row := body[i*stride : i*stride+stride]
+	v := (*[reference.VectorDim]float32)(unsafe.Pointer(&row[0]))
 	var d2 float64
 	for j := 0; j < reference.VectorDim; j++ {
-		bits := binary.LittleEndian.Uint32(row[j*4 : j*4+4])
-		diff := float64(math.Float32frombits(bits)) - q[j]
-		d2 += diff * diff
+		d := float64(v[j]) - q[j]
+		d2 += d * d
 	}
 	return d2, row[56] != 0
 }
 
-func topKInRangeRBin(q *[reference.VectorDim]float64, body []byte, stride, start, end, k int) []rbinCand {
+func topKInRangeRBinInto(dst []rbinCand, q *[reference.VectorDim]float64, body []byte, stride, start, end, k int) {
 	if start >= end {
-		return nil
+		return
 	}
 	nrows := end - start
 	localK := k
 	if nrows < localK {
 		localK = nrows
 	}
-	neighbors := make([]rbinCand, localK)
+	neighbors := dst[:localK]
 	for i := range neighbors {
 		neighbors[i].d2 = math.MaxFloat64
 	}
@@ -53,7 +53,6 @@ func topKInRangeRBin(q *[reference.VectorDim]float64, body []byte, stride, start
 			neighbors[worst] = rbinCand{d2: d2, fraud: fraud}
 		}
 	}
-	return neighbors
 }
 
 func fraudFractionFromCandidates(c []rbinCand, k int) float64 {
@@ -89,9 +88,6 @@ func knnWorkers() int {
 	return w
 }
 
-// FraudFractionRBin calcula fração de fraudes entre os k vizinhos mais próximos
-// (distância euclidiana; vetores float32 no layout references.rbin).
-// Com vários núcleos, usa partição + merge exato: o top-k global está contido na união dos top-k locais.
 func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) float64 {
 	if n == 0 {
 		return 0
@@ -107,13 +103,15 @@ func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) floa
 	w := knnWorkers()
 	// Partição só vale a pena com volume e paralelismo real (evita overhead em CPU única).
 	if w < 2 || n < 50_000 {
-		part := topKInRangeRBin(q, body, stride, 0, n, k)
-		return fraudFractionFromCandidates(part, k)
+		local := make([]rbinCand, k)
+		topKInRangeRBinInto(local, q, body, stride, 0, n, k)
+		return fraudFractionFromCandidates(local, k)
 	}
 
 	per := (n + w - 1) / w
-	partials := make([][]rbinCand, w)
+	buf := make([]rbinCand, w*k)
 	var wg sync.WaitGroup
+	launched := 0
 	for wi := 0; wi < w; wi++ {
 		start := wi * per
 		if start >= n {
@@ -123,19 +121,13 @@ func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) floa
 		if end > n {
 			end = n
 		}
+		launched++
 		wg.Add(1)
 		go func(wi, start, end int) {
 			defer wg.Done()
-			partials[wi] = topKInRangeRBin(q, body, stride, start, end, kNeighbors)
+			topKInRangeRBinInto(buf[wi*k:wi*k+k], q, body, stride, start, end, k)
 		}(wi, start, end)
 	}
 	wg.Wait()
-
-	var all []rbinCand
-	for _, p := range partials {
-		if len(p) > 0 {
-			all = append(all, p...)
-		}
-	}
-	return fraudFractionFromCandidates(all, k)
+	return fraudFractionFromCandidates(buf[:launched*k], k)
 }

@@ -32,8 +32,8 @@ func TestFraudFractionRBinParallelMatchesBrute(t *testing.T) {
 	}
 }
 
-func makeSyntheticRBin(t *testing.T, n int) []byte {
-	t.Helper()
+func makeSyntheticRBin(tb testing.TB, n int) []byte {
+	tb.Helper()
 	hdr := make([]byte, reference.RbinHeaderSize)
 	hdr[0], hdr[1], hdr[2], hdr[3] = 'R', 'R', 'E', 'F'
 	binary.LittleEndian.PutUint32(hdr[4:8], 1)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -40,12 +41,18 @@ func main() {
 	}
 
 	log.Info("carregando referências", "path", refPath)
-	idx, err := app.OpenReferenceIndex(refPath)
+	knnMode := getenv("KNN_MODE", "exact")
+	idx, err := app.OpenReferenceIndex(refPath, app.ReferenceIndexConfig{
+		KNNMode:    knnMode,
+		IVFPath:    getenv("REFERENCE_IVF_PATH", ""),
+		IVFProbes:  getenvInt("KNN_NPROBE", 24),
+		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 300_000),
+	})
 	if err != nil {
 		log.Error("referências", "path", refPath, "err", err)
 		os.Exit(1)
 	}
-	log.Info("referências prontas", "n", idx.Len())
+	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode)
 
 	reg := prometheus.NewRegistry()
 	fs := metrics.RegisterFraudScore(reg)
@@ -57,7 +64,12 @@ func main() {
 		}
 	}()
 	h := httpserver.New(log, svc, reg, fs)
-	srv := httpserver.DefaultServer(listen, h)
+	srv := httpserver.NewServer(listen, h, httpserver.ServerTimeouts{
+		ReadHeader: durationSecEnv("HTTP_READ_HEADER_TIMEOUT_SEC", 5),
+		Read:       durationSecEnv("HTTP_READ_TIMEOUT_SEC", 120),
+		Write:      durationSecEnv("HTTP_WRITE_TIMEOUT_SEC", 120),
+		Idle:       durationSecEnv("HTTP_IDLE_TIMEOUT_SEC", 60),
+	})
 
 	go func() {
 		log.Info("http escutando", "addr", listen)
@@ -80,4 +92,17 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func getenvInt(k string, def int) int {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func durationSecEnv(k string, defSecs int) time.Duration {
+	return time.Duration(getenvInt(k, defSecs)) * time.Second
 }
