@@ -20,7 +20,7 @@ A especificação exata dos campos e fórmulas está em [docs/br no repositório
 | **Dataset em `.rbin` + mmap** | O `references.json.gz` oficial descompacta em centenas de MB em JSON; em **binário compacto** (`float32` por dimensão + rótulo) o ficheiro fica menor e pode ser **mapeado na memória** sem deserializar milhões de objetos para o heap do Go. |
 | **KNN exato em CPU** | A avaliação compara com rótulos obtidos por **k-NN exato (k=5, euclidiana)** sobre as referências. Mantemos o mesmo critério de distância para não divergir da grelha de testes. |
 | **Partição paralela + merge** | O scan linear em ~3M pontos é pesado. Com **vários núcleos**, o vetor é dividido em faixas; cada faixa calcula os **5** melhores vizinhos locais; o **top-5 global** está sempre contido na **união** desses conjuntos (merge por ordenação dos candidatos). É **exatamente equivalente** ao brute force num único fio, com menos tempo de parede quando há CPU paralela. |
-| **`KNN_WORKERS` (env)** | Número de goroutines de partição (por defeito derivado de `GOMAXPROCS`, máx. 16). No Docker podes forçar (ex.: `8`) no `docker-compose.yml` conforme o host. |
+| **`KNN_WORKERS` (env)** | Goroutines de partição no KNN paralelo (opcional; por defeito derivado de `GOMAXPROCS`, máx. 8). No Docker usa valores baixos (ex.: `2`) quando a CPU por réplica é limitada. |
 
 **Limitação honesta:** por requisição o trabalho continua **O(N)** em relação ao número de referências. Sob **taxas muito altas** (ex.: script k6 da Rinha a ~900 req/s), o sistema pode **acumular fila** e estourar o **timeout de 2001 ms** do cliente — isso é esperado com scan completo sem índice aproximado. O próximo salto de performance é **ANN + re-ranking** (ou outro índice), descrito em `roadmap/observabilidade-e-proximos-passos.md`.
 
@@ -28,9 +28,9 @@ A especificação exata dos campos e fórmulas está em [docs/br no repositório
 
 ## Arquitetura de deploy (requisito da Rinha)
 
-- **Nginx** na porta **9999** (load balancer em round-robin).
-- **Duas réplicas** da API Go (internamente `:8080`), sem lógica de fraude no LB.
-- Limites de CPU/memória no `docker-compose.yml` alinhados ao teto global da competição (ver [ARQUITETURA.md](https://github.com/zanfranceschi/rinha-de-backend-2026/blob/main/docs/br/ARQUITETURA.md) no repo da Rinha).
+- **HAProxy** na porta **9999** (round-robin; só encaminha HTTP, sem lógica de negócio). Liga às réplicas por **Unix sockets** num volume `tmpfs` partilhado (`lb_sockets` → `/run/sockets`). Variante TCP: `deploy/nginx.conf` com *upstream keepalive* e `LISTEN=:8080` nas APIs.
+- **Duas réplicas** da API Go; no compose por defeito **`LISTEN=unix:/run/sockets/api-N.sock`** (sem porta TCP entre LB e API).
+- Limites no `docker-compose.yml`: **até 1 CPU e 350 MB no total** (soma dos serviços), conforme [ARQUITETURA.md](https://github.com/zanfranceschi/rinha-de-backend-2026/blob/main/docs/br/ARQUITETURA.md).
 
 No código: organização em camadas (`internal/domain`, `internal/vector`, `internal/knn`, `internal/reference`, `internal/app`, `internal/httpserver`) para manter o núcleo testável e o HTTP fino.
 
@@ -45,7 +45,8 @@ No código: organização em camadas (`internal/domain`, `internal/vector`, `int
 | `internal/vector` | Vetorização + testes alinhados aos exemplos oficiais |
 | `internal/knn` | KNN em RAM ou sobre mmap `.rbin` |
 | `internal/reference` | Loader JSON, formato `.rbin`, mmap |
-| `deploy/nginx.conf` | Upstream das duas APIs |
+| `deploy/haproxy.cfg` | LB na porta 9999 (round-robin, keep-alive para as APIs) |
+| `deploy/nginx.conf` | Variante Nginx (upstream keepalive) |
 | `data/` | `normalization.json`, `mcc_risk.json`, `references.json.gz` / `references.rbin` (não versionar o binário gigante se não quiseres) |
 | `roadmap/` | Observabilidade, próximos passos, ambiente de testes |
 | `scripts/` | `test.ps1`, `smoke.ps1`, `test.sh` |
@@ -84,7 +85,7 @@ docker compose up -d --build
 
 | Variável | Significado |
 |----------|-------------|
-| `LISTEN` | Endereço de escuta (por defeito `:8080` dentro do container) |
+| `LISTEN` | Endereço de escuta: **`:8080`** (TCP) ou **`unix:/caminho/ficheiro.sock`** (socket Unix; `chmod` 0666 para o HAProxy alpine ligar como utilizador `haproxy`) |
 | `DATA_DIR` | Pasta com `normalization.json` e `mcc_risk.json` |
 | `REFERENCE_PATH` | Caminho para `references.rbin` **ou** `references.json(.gz)` |
 | `KNN_WORKERS` | Número de workers do KNN particionado (opcional) |

@@ -18,17 +18,17 @@ type ReferenceIndexConfig struct {
 	// KNNMode "exact" (padrão) ou "ivf" (ANN + re-ranking exato sobre candidatos).
 	KNNMode string
 	// IVFPath caminho do .ivf; vazio + modo ivf → mesmo diretório do .rbin com sufixo .ivf
-	IVFPath string
+	IVFPath    string
 	IVFProbes  int
 	IVFMaxCand int
 }
 
 type hybridIndex struct {
-	mem   []reference.Record
-	mmap  *reference.MappedRBin
-	ivf   *reference.MappedIVF
-	mode  string
-	nprobe int
+	mem     []reference.Record
+	mmap    *reference.MappedRBin
+	ivf     *reference.MappedIVF
+	mode    string
+	nprobe  int
 	maxCand int
 }
 

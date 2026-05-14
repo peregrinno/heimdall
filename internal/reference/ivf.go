@@ -23,8 +23,8 @@ const (
 var ErrInvalidIVF = errors.New("references: arquivo .ivf inválido")
 
 type MappedIVF struct {
-	data mmap.MMap
-	n    int
+	data  mmap.MMap
+	n     int
 	nList int
 	// byte offsets dentro de data após validação
 	centroidsOff int
@@ -95,8 +95,8 @@ func (m *MappedIVF) Close() error {
 	return err
 }
 
-func (m *MappedIVF) N() int       { return m.n }
-func (m *MappedIVF) NList() int   { return m.nList }
+func (m *MappedIVF) N() int     { return m.n }
+func (m *MappedIVF) NList() int { return m.nList }
 
 func (m *MappedIVF) Centroids() []float32 {
 	n := m.nList * VectorDim

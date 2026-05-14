@@ -1,52 +1,58 @@
 services:
   lb:
-    image: nginx:1.27-alpine
+    image: haproxy:2.8-alpine
     platform: linux/amd64
     ports:
       - "9999:9999"
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - lb_sockets:/run/sockets
     depends_on:
       - api-1
       - api-2
     deploy:
       resources:
         limits:
-          cpus: "0.25"
+          cpus: "0.1"
           memory: "32M"
 
   api-1:
     build: .
     platform: linux/amd64
     environment:
-      LISTEN: ":8080"
+      LISTEN: "unix:/run/sockets/api-1.sock"
       REFERENCE_PATH: /data/references.rbin
       DATA_DIR: /data
       KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
-    expose:
-      - "8080"
+      - lb_sockets:/run/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.475"
+          cpus: "0.45"
           memory: "150M"
 
   api-2:
     build: .
     platform: linux/amd64
     environment:
-      LISTEN: ":8080"
+      LISTEN: "unix:/run/sockets/api-2.sock"
       REFERENCE_PATH: /data/references.rbin
       DATA_DIR: /data
       KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
-    expose:
-      - "8080"
+      - lb_sockets:/run/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.475"
+          cpus: "0.45"
           memory: "150M"
+
+volumes:
+  lb_sockets:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs

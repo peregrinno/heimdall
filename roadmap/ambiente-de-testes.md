@@ -9,7 +9,7 @@ Como executar testes automatizados e smoke checks do projeto Heimdall no seu amb
 | Ferramenta | Uso |
 |--------------|-----|
 | **Go 1.23+** | `go test`, `go run ./cmd/genrefs`, `go run ./cmd/api` |
-| **Docker / Docker Compose** | Testes de integração com nginx + 2 APIs (opcional para CI unitário) |
+| **Docker / Docker Compose** | Testes de integração com LB (HAProxy ou Nginx) + 2 APIs (opcional para CI unitário) |
 
 ---
 

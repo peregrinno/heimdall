@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -74,13 +76,42 @@ func main() {
 		}
 	}()
 	h := httpserver.New(log, svc, reg, fs)
-	srv := httpserver.NewServer(listen, h, httpserver.ServerTimeouts{
+	tmo := httpserver.ServerTimeouts{
 		ReadHeader: durationSecEnv("HTTP_READ_HEADER_TIMEOUT_SEC", 5),
 		Read:       durationSecEnv("HTTP_READ_TIMEOUT_SEC", 120),
 		Write:      durationSecEnv("HTTP_WRITE_TIMEOUT_SEC", 120),
 		Idle:       durationSecEnv("HTTP_IDLE_TIMEOUT_SEC", 60),
-	})
+	}
 
+	var unixPath string
+	if p, ok := parseUnixListen(listen); ok {
+		unixPath = p
+		if err := os.RemoveAll(unixPath); err != nil && !os.IsNotExist(err) {
+			log.Error("socket unix", "path", unixPath, "err", err)
+			os.Exit(1)
+		}
+		ln, err := net.Listen("unix", unixPath)
+		if err != nil {
+			log.Error("listen unix", "path", unixPath, "err", err)
+			os.Exit(1)
+		}
+		if err := os.Chmod(unixPath, 0o666); err != nil {
+			log.Error("chmod socket", "path", unixPath, "err", err)
+			os.Exit(1)
+		}
+		srv := httpserver.NewServer("", h, tmo)
+		go func() {
+			log.Info("http escutando", "addr", listen)
+			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+				log.Error("servidor", "err", err)
+				os.Exit(1)
+			}
+		}()
+		waitShutdown(srv, log, unixPath)
+		return
+	}
+
+	srv := httpserver.NewServer(listen, h, tmo)
 	go func() {
 		log.Info("http escutando", "addr", listen)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -88,13 +119,35 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+	waitShutdown(srv, log, "")
+}
 
+func parseUnixListen(addr string) (string, bool) {
+	a := strings.TrimSpace(addr)
+	if len(a) < 6 || !strings.EqualFold(a[:5], "unix:") {
+		return "", false
+	}
+	path := filepath.Clean(strings.TrimSpace(a[5:]))
+	if path == "" || path == "." {
+		return "", false
+	}
+	return path, true
+}
+
+func waitShutdown(srv *http.Server, log *slog.Logger, unixPath string) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = srv.Shutdown(ctx)
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Warn("shutdown http", "err", err)
+	}
+	if unixPath != "" {
+		if err := os.Remove(unixPath); err != nil && !os.IsNotExist(err) {
+			log.Warn("remover socket unix", "path", unixPath, "err", err)
+		}
+	}
 }
 
 func getenv(k, def string) string {
