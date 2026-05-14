@@ -1,0 +1,52 @@
+services:
+  lb:
+    image: nginx:1.27-alpine
+    platform: linux/amd64
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-1
+      - api-2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.05"
+          memory: "24M"
+
+  api-1:
+    build: .
+    platform: linux/amd64
+    environment:
+      LISTEN: ":8080"
+      REFERENCE_PATH: /data/references.rbin
+      DATA_DIR: /data
+      KNN_WORKERS: "8"
+    volumes:
+      - ./data:/data:ro
+    expose:
+      - "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.475"
+          memory: "150M"
+
+  api-2:
+    build: .
+    platform: linux/amd64
+    environment:
+      LISTEN: ":8080"
+      REFERENCE_PATH: /data/references.rbin
+      DATA_DIR: /data
+      KNN_WORKERS: "8"
+    volumes:
+      - ./data:/data:ro
+    expose:
+      - "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.475"
+          memory: "150M"

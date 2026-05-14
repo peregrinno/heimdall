@@ -1,0 +1,6 @@
+.git
+**/.git
+**/coverage.*
+data/references.json.gz
+*.exe
+*.test

@@ -28,5 +28,37 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Binários / output local na raiz (go build -o …)
+/bin/
+/dist/
+/api
+/genrefs
+
+# Datasets grandes da Rinha (gerar/baixar localmente; manter no repo só JSONs pequenos)
+data/references.json.gz
+data/references.rbin
+
+# Resultado de teste de carga k6 (se correres o script do repo da Rinha nesta pasta)
+test/results.json
+
+# Logs locais
+*.log
+
+# Ferramentas / caches comuns
+.cache/
+
+# Delve / GoLand
+__debug_bin*
+debug.test
+
+# Vim / emacs temporários
+*.swp
+*~
