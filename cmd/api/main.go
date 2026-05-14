@@ -22,12 +22,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const embeddedReferencesRBin = "/app/data/references.rbin"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	listen := getenv("LISTEN", ":8080")
 	dataDir := getenv("DATA_DIR", "./data")
-	refPath := getenv("REFERENCE_PATH", filepath.Join(dataDir, "references.rbin"))
+	refPath := pickReferencePath(getenv("REFERENCE_PATH", filepath.Join(dataDir, "references.rbin")), log)
 
 	normPath := filepath.Join(dataDir, "normalization.json")
 	mccPath := filepath.Join(dataDir, "mcc_risk.json")
@@ -148,6 +150,17 @@ func waitShutdown(srv *http.Server, log *slog.Logger, unixPath string) {
 			log.Warn("remover socket unix", "path", unixPath, "err", err)
 		}
 	}
+}
+
+func pickReferencePath(refPath string, log *slog.Logger) string {
+	if st, err := os.Stat(refPath); err == nil && !st.IsDir() {
+		return refPath
+	}
+	if st, err := os.Stat(embeddedReferencesRBin); err == nil && !st.IsDir() {
+		log.Info("referências", "path", refPath, "msg", "ficheiro ausente, a usar embutido na imagem", "fallback", embeddedReferencesRBin)
+		return embeddedReferencesRBin
+	}
+	return refPath
 }
 
 func getenv(k, def string) string {
