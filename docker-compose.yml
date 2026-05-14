@@ -22,7 +22,7 @@ services:
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
       REFERENCE_PATH: /data/references.rbin
-      DATA_DIR: /data
+      DATA_DIR: /app/data
       KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
@@ -39,7 +39,7 @@ services:
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
       REFERENCE_PATH: /data/references.rbin
-      DATA_DIR: /data
+      DATA_DIR: /app/data
       KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
