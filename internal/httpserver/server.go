@@ -8,10 +8,17 @@ import (
 
 	"heimdall/internal/app"
 	"heimdall/internal/domain"
+	"heimdall/internal/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func New(log *slog.Logger, svc *app.Service) http.Handler {
+func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metrics.FraudScore) http.Handler {
 	mux := http.NewServeMux()
+	if reg != nil {
+		mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	}
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
 		if !svc.Ready() {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
@@ -19,7 +26,26 @@ func New(log *slog.Logger, svc *app.Service) http.Handler {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("POST /fraud-score", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /fraud-score", fraudScoreHandler(log, svc, fs))
+	return mux
+}
+
+func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var deferObs func()
+		if fs != nil {
+			sw := &statusRecorder{ResponseWriter: w}
+			w = sw
+			start := time.Now()
+			deferObs = func() {
+				fs.HandlerSeconds.Observe(time.Since(start).Seconds())
+				fs.Responses.WithLabelValues(httpStatusClass(sw.status())).Inc()
+			}
+		}
+		if deferObs != nil {
+			defer deferObs()
+		}
+
 		if !svc.Ready() {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
@@ -44,8 +70,44 @@ func New(log *slog.Logger, svc *app.Service) http.Handler {
 		if err := enc.Encode(out); err != nil {
 			log.Warn("encode response", "err", err)
 		}
-	})
-	return mux
+	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	code int
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.code = code
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+func (sr *statusRecorder) Write(b []byte) (int, error) {
+	if sr.code == 0 {
+		sr.code = http.StatusOK
+	}
+	return sr.ResponseWriter.Write(b)
+}
+
+func (sr *statusRecorder) status() int {
+	if sr.code == 0 {
+		return http.StatusOK
+	}
+	return sr.code
+}
+
+func httpStatusClass(code int) string {
+	switch {
+	case code >= 200 && code < 300:
+		return "2xx"
+	case code >= 400 && code < 500:
+		return "4xx"
+	case code >= 500:
+		return "5xx"
+	default:
+		return "other"
+	}
 }
 
 // DefaultServer retorna servidor com timeouts defensivos (camada HTTP).

@@ -13,6 +13,9 @@ import (
 	"heimdall/internal/app"
 	"heimdall/internal/config"
 	"heimdall/internal/httpserver"
+	"heimdall/internal/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func main() {
@@ -44,13 +47,16 @@ func main() {
 	}
 	log.Info("referências prontas", "n", idx.Len())
 
-	svc := app.NewService(log, norm, mcc, idx)
+	reg := prometheus.NewRegistry()
+	fs := metrics.RegisterFraudScore(reg)
+
+	svc := app.NewService(log, norm, mcc, idx, fs.KNNDuration)
 	defer func() {
 		if err := svc.Close(); err != nil {
 			log.Warn("fechar serviço", "err", err)
 		}
 	}()
-	h := httpserver.New(log, svc)
+	h := httpserver.New(log, svc, reg, fs)
 	srv := httpserver.DefaultServer(listen, h)
 
 	go func() {
