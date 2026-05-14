@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"heimdall/internal/reference"
+	"heimdall/internal/vector"
 )
 
 func TestFraudFractionRBinIVF_AllListsMatchesExact(t *testing.T) {
@@ -18,7 +19,7 @@ func TestFraudFractionRBinIVF_AllListsMatchesExact(t *testing.T) {
 	const n = 80
 	hdr := make([]byte, reference.RbinHeaderSize)
 	hdr[0], hdr[1], hdr[2], hdr[3] = 'R', 'R', 'E', 'F'
-	binary.LittleEndian.PutUint32(hdr[4:8], 1)
+	binary.LittleEndian.PutUint32(hdr[4:8], reference.RbinVersion2)
 	binary.LittleEndian.PutUint32(hdr[8:12], uint32(n))
 	binary.LittleEndian.PutUint16(hdr[12:14], 14)
 	body := make([]byte, n*reference.RbinRowStride)
@@ -30,6 +31,12 @@ func TestFraudFractionRBinIVF_AllListsMatchesExact(t *testing.T) {
 		if i%11 == 0 {
 			row[56] = 1
 		}
+		var kb [reference.VectorDim]float64
+		for j := 0; j < reference.VectorDim; j++ {
+			bits := binary.LittleEndian.Uint32(row[j*4 : j*4+4])
+			kb[j] = float64(math.Float32frombits(bits))
+		}
+		row[57] = vector.PartitionKey(&kb)
 	}
 	if err := os.WriteFile(rbinPath, append(hdr, body...), 0o644); err != nil {
 		t.Fatal(err)

@@ -24,7 +24,7 @@ func Limitar(x float64) float64 {
 }
 
 func SpecWeekday(t time.Time) int {
-	w := int(t.UTC().Weekday()) // Go: domingo=0, segunda=1, ...
+	w := int(t.UTC().Weekday())
 	return (w + 6) % 7
 }
 

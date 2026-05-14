@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"heimdall/internal/reference"
+	"heimdall/internal/vector"
 )
 
 func TestFraudFractionRBinParallelMatchesBrute(t *testing.T) {
@@ -17,6 +18,7 @@ func TestFraudFractionRBinParallelMatchesBrute(t *testing.T) {
 	}
 	const n = 55_000
 	t.Setenv("KNN_WORKERS", "8")
+	t.Setenv("KNN_PARALLEL_MIN_SCAN", "10000")
 
 	data := makeSyntheticRBin(t, n)
 	rng := rand.New(rand.NewSource(7))
@@ -36,7 +38,7 @@ func makeSyntheticRBin(tb testing.TB, n int) []byte {
 	tb.Helper()
 	hdr := make([]byte, reference.RbinHeaderSize)
 	hdr[0], hdr[1], hdr[2], hdr[3] = 'R', 'R', 'E', 'F'
-	binary.LittleEndian.PutUint32(hdr[4:8], 1)
+	binary.LittleEndian.PutUint32(hdr[4:8], reference.RbinVersion2)
 	binary.LittleEndian.PutUint32(hdr[8:12], uint32(n))
 	binary.LittleEndian.PutUint16(hdr[12:14], 14)
 	body := make([]byte, n*reference.RbinRowStride)
@@ -49,6 +51,12 @@ func makeSyntheticRBin(tb testing.TB, n int) []byte {
 		if i%7 == 0 {
 			row[56] = 1
 		}
+		var kb [reference.VectorDim]float64
+		for j := 0; j < reference.VectorDim; j++ {
+			bits := binary.LittleEndian.Uint32(row[j*4 : j*4+4])
+			kb[j] = float64(math.Float32frombits(bits))
+		}
+		row[57] = vector.PartitionKey(&kb)
 	}
 	return append(hdr, body...)
 }
@@ -63,7 +71,7 @@ func fraudFractionBruteRBin(q *[reference.VectorDim]float64, data []byte, n int)
 		fraud bool
 	}
 	all := make([]item, n)
-	body := data[reference.RbinHeaderSize:]
+	body := data[reference.RbinBodyOffset(data):]
 	stride := reference.RbinRowStride
 	for i := 0; i < n; i++ {
 		d2, fraud := rowDist2RBin(q, body, stride, i)

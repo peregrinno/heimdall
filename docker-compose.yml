@@ -22,7 +22,7 @@ services:
       LISTEN: ":8080"
       REFERENCE_PATH: /data/references.rbin
       DATA_DIR: /data
-      KNN_WORKERS: "8"
+      KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
     expose:
@@ -40,7 +40,7 @@ services:
       LISTEN: ":8080"
       REFERENCE_PATH: /data/references.rbin
       DATA_DIR: /data
-      KNN_WORKERS: "8"
+      KNN_WORKERS: "2"
     volumes:
       - ./data:/data:ro
     expose:

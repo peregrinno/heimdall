@@ -1,10 +1,12 @@
 package knn
 
 import (
+	"encoding/binary"
 	"math"
 	"sort"
 
 	"heimdall/internal/reference"
+	"heimdall/internal/vector"
 )
 
 func dist2QueryCentroid(q *[reference.VectorDim]float64, cents []float32, c int) float64 {
@@ -61,8 +63,14 @@ func FraudFractionRBinIVF(q *[reference.VectorDim]float64, data []byte, n int, i
 		return FraudFractionRBin(q, data, n)
 	}
 
-	body := data[reference.RbinHeaderSize:]
+	body := data[reference.RbinBodyOffset(data):]
 	stride := reference.RbinRowStride
+	ver := binary.LittleEndian.Uint32(data[4:8])
+	usePart := ver >= reference.RbinVersion2
+	var qPart uint8
+	if usePart {
+		qPart = vector.PartitionKey(q)
+	}
 	local := make([]rbinCand, k)
 	for i := range local {
 		local[i].d2 = math.MaxFloat64
@@ -75,6 +83,9 @@ func FraudFractionRBinIVF(q *[reference.VectorDim]float64, data []byte, n int, i
 			ri := int(posts[p])
 			if ri < 0 || ri >= n {
 				return FraudFractionRBin(q, data, n)
+			}
+			if usePart && body[ri*stride+57] != qPart {
+				continue
 			}
 			d2, fraud := rowDist2RBin(q, body, stride, ri)
 			worst := 0

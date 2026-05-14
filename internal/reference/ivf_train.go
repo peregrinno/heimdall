@@ -9,8 +9,6 @@ import (
 	"unsafe"
 )
 
-// TrainIVFFromRBin executa k-means (Lloyd) sobre vetores do .rbin e devolve dados para WriteIVFFile.
-// nList efetivo pode ser truncado a n se n for menor que o pedido.
 func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n int, nListOut int, centroids []float32, postingOffsets []uint32, postings []uint32, err error) {
 	mm, err := os.ReadFile(rbinPath)
 	if err != nil {
@@ -18,6 +16,10 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 	}
 	if len(mm) < RbinHeaderSize {
 		return 0, 0, nil, nil, nil, fmt.Errorf("rbin curto")
+	}
+	ver := binary.LittleEndian.Uint32(mm[4:8])
+	if ver != RbinVersion1 && ver != RbinVersion2 && ver != RbinVersion3 {
+		return 0, 0, nil, nil, nil, fmt.Errorf("rbin versão %d", ver)
 	}
 	n = int(binary.LittleEndian.Uint32(mm[8:12]))
 	if n < 1 || nList < 1 {
@@ -27,7 +29,7 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 		nList = n
 	}
 	nListOut = nList
-	body := mm[RbinHeaderSize:]
+	body := mm[RbinBodyOffset(mm):]
 	stride := RbinRowStride
 	want := n * stride
 	if len(body) < want {
@@ -36,7 +38,6 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 
 	rng := rand.New(rand.NewSource(seed))
 	centroids = make([]float32, nList*VectorDim)
-	// Inicialização: amostra estratificada de linhas.
 	for j := 0; j < nList; j++ {
 		idx := j * n / nList
 		if idx >= n {

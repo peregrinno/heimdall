@@ -1,6 +1,7 @@
 package reference
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,5 +37,15 @@ func TestBuildRBinAndMmapLen(t *testing.T) {
 	defer func() { _ = m.Close() }()
 	if m.Len() != 2 {
 		t.Fatalf("mmap len=%d", m.Len())
+	}
+	if m.Ver != RbinVersion3 {
+		t.Fatalf("versão .rbin=%d, esperado %d", m.Ver, RbinVersion3)
+	}
+	raw := m.Raw()
+	if RbinBodyOffset(raw) != RbinHeaderSizeV3 {
+		t.Fatalf("body offset=%d", RbinBodyOffset(raw))
+	}
+	if got := int(binary.LittleEndian.Uint32(raw[64+32*4 : 64+33*4])); got != 2 {
+		t.Fatalf("partStart[32]=%d", got)
 	}
 }

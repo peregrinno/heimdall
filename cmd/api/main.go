@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"syscall"
 	"time"
@@ -53,6 +54,15 @@ func main() {
 		os.Exit(1)
 	}
 	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode)
+
+	if os.Getenv("HEIMDALL_DISABLE_GC") == "1" {
+		debug.SetGCPercent(-1)
+	}
+	if s := os.Getenv("HEIMDALL_MEM_LIMIT_BYTES"); s != "" {
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 {
+			debug.SetMemoryLimit(n)
+		}
+	}
 
 	reg := prometheus.NewRegistry()
 	fs := metrics.RegisterFraudScore(reg)

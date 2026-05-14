@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"heimdall/internal/vector"
 )
 
 func TestIVFWriteReadRoundTrip(t *testing.T) {
@@ -13,12 +15,10 @@ func TestIVFWriteReadRoundTrip(t *testing.T) {
 	rbin := filepath.Join(dir, "t.rbin")
 	ivf := filepath.Join(dir, "t.ivf")
 
-	// rbin mínimo: 20 linhas sintéticas (usa o mesmo helper que knn, mas aqui escrevemos via Train input)
-	// Construímos bytes de rbin manualmente como em knn tests.
 	n := 20
 	hdr := make([]byte, RbinHeaderSize)
 	hdr[0], hdr[1], hdr[2], hdr[3] = 'R', 'R', 'E', 'F'
-	binary.LittleEndian.PutUint32(hdr[4:8], 1)
+	binary.LittleEndian.PutUint32(hdr[4:8], RbinVersion2)
 	binary.LittleEndian.PutUint32(hdr[8:12], uint32(n))
 	binary.LittleEndian.PutUint16(hdr[12:14], 14)
 	body := make([]byte, n*RbinRowStride)
@@ -27,6 +27,11 @@ func TestIVFWriteReadRoundTrip(t *testing.T) {
 		for j := 0; j < VectorDim; j++ {
 			binary.LittleEndian.PutUint32(row[j*4:j*4+4], math.Float32bits(float32(i+j)))
 		}
+		var kb [VectorDim]float64
+		for j := 0; j < VectorDim; j++ {
+			kb[j] = float64(i + j)
+		}
+		row[57] = vector.PartitionKey(&kb)
 	}
 	if err := os.WriteFile(rbin, append(hdr, body...), 0o644); err != nil {
 		t.Fatal(err)
