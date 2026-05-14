@@ -5,6 +5,7 @@ on:
     branches: main
   pull_request:
     branches: main
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -20,3 +21,46 @@ jobs:
 
       - name: Test
         run: go test ./... -count=1
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+
+      - name: Gerar references.rbin mínimo para smoke
+        run: go run ./cmd/genrefs -in ./data/example-references.json -out ./data/references.rbin
+
+      - name: Subir stack (compose na raiz)
+        run: docker compose up --build -d
+
+      - name: Aguardar /ready
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://localhost:9999/ready"; then
+              echo "ready OK (tentativa $i)"
+              exit 0
+            fi
+            echo "Attempt $i: /ready not ready yet"
+            sleep 3
+          done
+          echo "Backend never became ready on http://localhost:9999/ready"
+          docker compose logs || true
+          exit 1
+
+      - name: POST /fraud-score (smoke)
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST "http://localhost:9999/fraud-score" \
+            -H "Content-Type: application/json" \
+            -d '{"id":"tx-smoke-1","transaction":{"amount":384.88,"installments":3,"requested_at":"2026-03-11T20:23:35Z"},"customer":{"avg_amount":769.76,"tx_count_24h":3,"known_merchants":["MERC-009","MERC-001"]},"merchant":{"id":"MERC-001","mcc":"5912","avg_amount":298.95},"terminal":{"is_online":false,"card_present":true,"km_from_home":13.7},"last_transaction":{"timestamp":"2026-03-11T14:58:35Z","km_from_current":18.8}}'
+
+      - name: Logs e teardown
+        if: always()
+        run: docker compose logs || true; docker compose down -v || true
