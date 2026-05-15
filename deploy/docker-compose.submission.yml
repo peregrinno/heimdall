@@ -21,8 +21,6 @@ services:
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
-      # Na submission, os dados estão embedados na imagem em /app/data
-      # (sem bind mount de ./data, que só existe no dev local).
       REFERENCE_PATH: /app/data/references.rbin
       REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
@@ -54,8 +52,6 @@ services:
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
-      # Na submission, os dados estão embedados na imagem em /app/data
-      # (sem bind mount de ./data, que só existe no dev local).
       REFERENCE_PATH: /app/data/references.rbin
       REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
@@ -85,8 +81,6 @@ services:
   warmup:
     image: curlimages/curl:8.10.1
     platform: linux/amd64
-    # `sh -e` no entrypoint evita ter que usar `set -e` dentro do script
-    # (mais resiliente a CRLF de bind mounts no Docker Desktop Windows).
     entrypoint: ["/bin/sh", "-e", "/scripts/warmup.sh"]
     environment:
       BASE_URL: "http://lb:9999"
@@ -94,7 +88,6 @@ services:
       READY_SLEEP: "0.25"
       WARMUP_ROUNDS: "120"
     volumes:
-      # Bind do diretório (não do arquivo único) é mais estável no Windows.
       - ./scripts:/scripts:ro
     depends_on:
       - lb

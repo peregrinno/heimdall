@@ -1,12 +1,4 @@
 #!/bin/sh
-# Pré-aquecimento da stack antes do k6 oficial:
-# - aguarda /ready,
-# - dispara N requests reais cobrindo diferentes faixas e categorias,
-#   o que aquece branch predictor, page cache do .rbin/.ivf e
-#   keepalive do HAProxy → o k6 não paga "cold start" no p99.
-# Obs.: o entrypoint roda este script com `sh -e`; não usamos `set -eu` aqui
-# para evitar problemas raros de bind mount em Windows convertendo o final
-# da linha em CRLF e fazendo o shell ver "set -eu\r" como opção inválida.
 
 BASE_URL="${BASE_URL:-http://lb:9999}"
 READY_URL="${BASE_URL}/ready"

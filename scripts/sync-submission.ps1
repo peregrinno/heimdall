@@ -46,8 +46,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Helper: roda comando externo e ignora warnings em stderr.
-# Usar para git/docker que emitem warnings legítimos em stderr.
 function Invoke-Native {
     param([scriptblock]$Block)
     $prev = $ErrorActionPreference
