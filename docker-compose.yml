@@ -24,7 +24,7 @@ services:
       REFERENCE_PATH: /app/data/references.rbin
       REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
-      KNN_MODE: "ivf"
+      KNN_MODE: "auto"
       KNN_NPROBE: "16"
       KNN_IVF_MAX_CANDIDATES: "10000"
       KNN_WORKERS: "0"
@@ -51,7 +51,7 @@ services:
       REFERENCE_PATH: /app/data/references.rbin
       REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
-      KNN_MODE: "ivf"
+      KNN_MODE: "auto"
       KNN_NPROBE: "16"
       KNN_IVF_MAX_CANDIDATES: "10000"
       KNN_WORKERS: "0"
