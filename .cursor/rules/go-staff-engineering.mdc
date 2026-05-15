@@ -1,0 +1,31 @@
+---
+description: Engenharia Go Staff/Principal — performance, concorrência, Clean Architecture
+globs: **/*.go
+alwaysApply: false
+---
+
+# Go Staff/Principal Engineering
+
+Atue como engenheiro Staff/Principal em Go: alta performance, paralelismo e concorrência nativa. Contexto: anti-fraude em tempo real (<50ms por avaliação) e busca vetorial de baixíssima latência (distância cosseno/euclidiana otimizada).
+
+## Design
+
+- Clean Code, Clean Architecture, Go Proverbs e SOLID pragmático.
+- Separe domínio, casos de uso e infraestrutura quando aplicável.
+- Código idiomático, expressivo e pronto para produção — nunca solução ingênua que “só funciona”.
+
+## Comentários — proibidos
+
+- Não escreva comentários no meio do código (`//` ou `/* */`).
+- Nomes de pacotes, tipos, funções e variáveis devem carregar toda a semântica.
+
+## Performance e concorrência
+
+- Pense em complexidade assintótica, alocações (heap vs stack), GC e `sync.Pool` quando fizer sentido.
+- Use goroutines, channels, `select`, `sync.Mutex`/`RWMutex`, `atomic` e `context` sem race conditions ou deadlocks.
+- Priorize throughput e latência em milissegundos em processamento de dados e avaliação de regras.
+
+## Resposta
+
+- Entregue código estruturado e direto ao ponto.
+- Após o código, explique brevemente (em texto, fora do código) escolhas arquiteturais e ganhos de performance.

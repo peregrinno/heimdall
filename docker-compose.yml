@@ -13,7 +13,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
+          cpus: "0.10"
           memory: "32M"
 
   api-1:
@@ -21,34 +21,54 @@ services:
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
-      REFERENCE_PATH: /data/references.rbin
+      REFERENCE_PATH: /app/data/references.rbin
+      REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
-      KNN_WORKERS: "2"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "16"
+      KNN_IVF_MAX_CANDIDATES: "10000"
+      KNN_WORKERS: "0"
+      KNN_PARALLEL_MIN_SCAN: "200000000"
+      GOMAXPROCS: "1"
+      GOGC: "200"
+      HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      MIN_REFERENCES: "2000000"
+      WARMUP: "1"
+      METRICS: "0"
     volumes:
-      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
         limits:
           cpus: "0.45"
-          memory: "150M"
+          memory: "159M"
 
   api-2:
     image: peregrinno/heimdall:latest
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
-      REFERENCE_PATH: /data/references.rbin
+      REFERENCE_PATH: /app/data/references.rbin
+      REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
-      KNN_WORKERS: "2"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "16"
+      KNN_IVF_MAX_CANDIDATES: "10000"
+      KNN_WORKERS: "0"
+      KNN_PARALLEL_MIN_SCAN: "200000000"
+      GOMAXPROCS: "1"
+      GOGC: "200"
+      HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      MIN_REFERENCES: "2000000"
+      WARMUP: "1"
+      METRICS: "0"
     volumes:
-      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
         limits:
           cpus: "0.45"
-          memory: "150M"
+          memory: "159M"
 
 volumes:
   lb_sockets:
