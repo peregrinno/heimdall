@@ -1,0 +1,88 @@
+# Após CI verde na main, fixa na branch submission o digest de peregrinno/heimdall:latest.
+# Importante: faz docker push ANTES do push para main, senão o digest no Hub ainda é o anterior.
+name: Sync submission digest
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: "Digest opcional (ex. sha256:4dfe...). Vazio = usa :latest no Hub."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  sync-submission:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolver digest da imagem
+        id: digest
+        env:
+          INPUT_DIGEST: ${{ github.event.inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_DIGEST:-}" ]; then
+            DIGEST="${INPUT_DIGEST#peregrinno/heimdall@}"
+            echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          REPO="peregrinno/heimdall"
+          TAG="latest"
+          TOKEN=$(curl -fsSL \
+            "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${REPO}:pull" \
+            | jq -r .token)
+          DIGEST=$(curl -fsSL -I \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+            "https://registry-1.docker.io/v2/${REPO}/manifests/${TAG}" \
+            | awk -F': ' 'tolower($1)=="docker-content-digest" {print $2}' | tr -d '\r')
+          if [ -z "${DIGEST}" ]; then
+            echo "Não foi possível obter digest de ${REPO}:${TAG}" >&2
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Digest: ${DIGEST}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: submission
+          fetch-depth: 0
+
+      - name: Atualizar docker-compose.yml na submission
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          FILE=docker-compose.yml
+          if [ ! -f "$FILE" ]; then
+            echo "$FILE não existe na branch submission" >&2
+            exit 1
+          fi
+          sed -i "s|image: peregrinno/heimdall:.*|image: peregrinno/heimdall@${DIGEST}|g" "$FILE"
+          grep "peregrinno/heimdall@" "$FILE"
+
+      - name: Commit e push na submission
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docker-compose.yml
+          if git diff --staged --quiet; then
+            echo "submission já está com digest ${DIGEST}"
+            exit 0
+          fi
+          SHORT="${DIGEST#sha256:}"
+          SHORT="${SHORT:0:12}"
+          git commit -m "chore(submission): pin image @ ${SHORT}"
+          git push origin submission
