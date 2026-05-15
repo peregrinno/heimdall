@@ -8,6 +8,9 @@ genrefs:
 genivf:
 	go run ./cmd/genivf -rbin ./data/references.rbin -out ./data/references.ivf -lists 512 -iter 12
 
+genivf-hq:
+	go run ./cmd/genivf -rbin ./data/references.rbin -out ./data/references.ivf -lists 2048 -iter 15 -workers 8
+
 gendata: genrefs genivf
 
 up:

@@ -25,15 +25,15 @@ services:
       REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
-      KNN_NPROBE: "6"
-      KNN_IVF_MAX_CANDIDATES: "8000"
+      KNN_NPROBE: "16"
+      KNN_IVF_MAX_CANDIDATES: "10000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
       GOMAXPROCS: "1"
-      GOGC: "off"
-      HEIMDALL_DISABLE_GC: "1"
-      HEIMDALL_MEM_LIMIT_BYTES: "140000000"
+      GOGC: "200"
+      HEIMDALL_MEM_LIMIT_BYTES: "120000000"
       MIN_REFERENCES: "2000000"
+      WARMUP: "1"
       METRICS: "0"
     volumes:
       - ./data:/data:ro
@@ -53,15 +53,15 @@ services:
       REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
-      KNN_NPROBE: "6"
-      KNN_IVF_MAX_CANDIDATES: "8000"
+      KNN_NPROBE: "16"
+      KNN_IVF_MAX_CANDIDATES: "10000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
       GOMAXPROCS: "1"
-      GOGC: "off"
-      HEIMDALL_DISABLE_GC: "1"
-      HEIMDALL_MEM_LIMIT_BYTES: "140000000"
+      GOGC: "200"
+      HEIMDALL_MEM_LIMIT_BYTES: "120000000"
       MIN_REFERENCES: "2000000"
+      WARMUP: "1"
       METRICS: "0"
     volumes:
       - ./data:/data:ro

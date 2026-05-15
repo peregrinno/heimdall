@@ -26,12 +26,23 @@ var ivfListPool = sync.Pool{
 
 func dist2QueryCentroid32(q *[reference.VectorDim]float32, cents []float32, c int) float32 {
 	off := c * reference.VectorDim
-	var s float32
-	for d := 0; d < reference.VectorDim; d++ {
-		df := q[d] - cents[off+d]
-		s += df * df
-	}
-	return s
+	row := (*[reference.VectorDim]float32)(cents[off : off+reference.VectorDim : off+reference.VectorDim])
+	d0 := q[0] - row[0]
+	d1 := q[1] - row[1]
+	d2 := q[2] - row[2]
+	d3 := q[3] - row[3]
+	d4 := q[4] - row[4]
+	d5 := q[5] - row[5]
+	d6 := q[6] - row[6]
+	d7 := q[7] - row[7]
+	d8 := q[8] - row[8]
+	d9 := q[9] - row[9]
+	d10 := q[10] - row[10]
+	d11 := q[11] - row[11]
+	d12 := q[12] - row[12]
+	d13 := q[13] - row[13]
+	return d0*d0 + d1*d1 + d2*d2 + d3*d3 + d4*d4 + d5*d5 + d6*d6 + d7*d7 +
+		d8*d8 + d9*d9 + d10*d10 + d11*d11 + d12*d12 + d13*d13
 }
 
 type ivfCentroidDist struct {

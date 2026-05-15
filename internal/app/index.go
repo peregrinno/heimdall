@@ -11,6 +11,7 @@ import (
 type ReferenceIndex interface {
 	Len() int
 	FraudFraction(q *[reference.VectorDim]float64) float64
+	Warmup()
 	Close() error
 }
 
@@ -39,7 +40,7 @@ func OpenReferenceIndex(refPath string, cfg ReferenceIndexConfig) (ReferenceInde
 		if err != nil {
 			return nil, err
 		}
-		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 6, maxCand: 8_000}
+		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 16, maxCand: 10_000}
 		mode := strings.ToLower(strings.TrimSpace(cfg.KNNMode))
 		if mode == "" {
 			mode = "exact"
@@ -102,6 +103,30 @@ func (h *hybridIndex) FraudFraction(q *[reference.VectorDim]float64) float64 {
 		return knn.FraudFractionRBin(q, h.mmap.Raw(), h.mmap.Len())
 	}
 	return knn.FraudFraction(q, h.mem)
+}
+
+func (h *hybridIndex) Warmup() {
+	if h.ivf == nil {
+		return
+	}
+	cents := h.ivf.Centroids()
+	var fs float32
+	for i := 0; i < len(cents); i++ {
+		fs += cents[i]
+	}
+	offs := h.ivf.PostingOffsets()
+	var u uint32
+	for i := 0; i < len(offs); i++ {
+		u ^= offs[i]
+	}
+	posts := h.ivf.Postings()
+	var p uint32
+	for i := 0; i < len(posts); i++ {
+		p ^= posts[i]
+	}
+	_ = fs
+	_ = u
+	_ = p
 }
 
 func (h *hybridIndex) Close() error {

@@ -365,7 +365,26 @@ flowchart TD
 4. `k6 run test/test.js` no clone da Rinha (~2 min de teste + rampa).
 5. Ajustar performance/precisão e repetir.
 
-### 6.7 Problemas comuns no teste local
+### 6.7 Tuning para `final_score` alto
+
+A pontuação satura nos extremos: cada **10× de p99** vale **+1000** e cada **10× de erros** vale **+1000** (com penalidade absoluta). Heurística:
+
+| Faixa atual | Próximo passo |
+|-------------|--------------|
+| `final_score` < 0 (cortes ativos) | Habilitar IVF e gerar `.ivf`; reduzir `KNN_IVF_MAX_CANDIDATES` |
+| 2000–3500 (p99 baixo, detecção média) | Aumentar `KNN_NPROBE` e `KNN_IVF_MAX_CANDIDATES` aos poucos |
+| 3500–4500 (p99 < 10 ms, FP+FN > 100) | **Regenerar IVF com mais listas** (`-lists 2048` ou `4096`) |
+| > 4500 | Otimização fina: warmup, parsing manual de tempo, AVX/asm |
+
+**Regeneração recomendada para `final_score > 4500`:**
+
+```powershell
+go run ./cmd/genivf -rbin .\data\references.rbin -out .\data\references.ivf -lists 2048 -iter 15 -workers 8
+```
+
+Com 2048 listas, cada cluster tem ~1465 vetores (vs ~5860 com 512), os top-N vizinhos caem em menos listas → menos candidatos para a mesma precisão. Esperar: training ~15–40 min, `KNN_NPROBE=16`, `KNN_IVF_MAX_CANDIDATES=14000`.
+
+### 6.8 Problemas comuns no teste local
 
 | Sintoma | Causa provável | O que fazer |
 |---------|----------------|-------------|

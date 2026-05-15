@@ -53,14 +53,20 @@ func main() {
 	idx, err := app.OpenReferenceIndex(refPath, app.ReferenceIndexConfig{
 		KNNMode:    knnMode,
 		IVFPath:    getenv("REFERENCE_IVF_PATH", ""),
-		IVFProbes:  getenvInt("KNN_NPROBE", 6),
-		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 8_000),
+		IVFProbes:  getenvInt("KNN_NPROBE", 16),
+		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 10_000),
 	})
 	if err != nil {
 		log.Error("referências", "path", refPath, "err", err)
 		os.Exit(1)
 	}
 	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode)
+
+	if getenv("WARMUP", "1") == "1" {
+		t0 := time.Now()
+		idx.Warmup()
+		log.Info("warmup mmap concluído", "elapsed_ms", time.Since(t0).Milliseconds())
+	}
 
 	minRefs := getenvInt("MIN_REFERENCES", defaultMinReferences)
 	if minRefs > 0 && idx.Len() < minRefs {
