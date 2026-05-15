@@ -29,8 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Subir stack (compose na raiz; .rbin mínimo vem da imagem)
-        run: docker compose up --build -d
+      - name: Subir stack CI (sem volume; usa .rbin embutido no Dockerfile)
+        run: docker compose -f docker-compose.ci.yml up --build -d
 
       - name: Aguardar /ready
         run: |
@@ -44,7 +44,7 @@ jobs:
             sleep 3
           done
           echo "Backend never became ready on http://localhost:9999/ready"
-          docker compose logs || true
+          docker compose -f docker-compose.ci.yml logs || true
           exit 1
 
       - name: POST /fraud-score (smoke)
@@ -56,4 +56,4 @@ jobs:
 
       - name: Logs e teardown
         if: always()
-        run: docker compose logs || true; docker compose down -v || true
+        run: docker compose -f docker-compose.ci.yml logs || true; docker compose -f docker-compose.ci.yml down -v || true
