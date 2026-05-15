@@ -17,7 +17,7 @@ services:
           memory: "32M"
 
   api-1:
-    image: peregrinno/heimdall:latest
+    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
@@ -44,7 +44,7 @@ services:
           memory: "159M"
 
   api-2:
-    image: peregrinno/heimdall:latest
+    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
