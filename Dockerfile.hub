@@ -5,7 +5,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG GIT_SHA=unknown
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${GIT_SHA}" -o /out/api ./cmd/api
+# GOAMD64=v3 = Haswell baseline (SSE4.2, AVX, AVX2, FMA3, BMI1/2).
+# A infra da Rinha roda em Mac Mini Haswell, então v3 é compatível.
+# Liga auto-vectorização em loops escalares (distâncias) e ~5–8% de ganho.
+# -pgo=auto consome cmd/api/default.pgo (gerado a partir do bench IVF)
+# para reorganizar inlining e branch hints no caminho hot.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v3 \
+    go build -trimpath -pgo=auto -ldflags="-s -w -X main.version=${GIT_SHA}" \
+    -o /out/api ./cmd/api
 
 FROM --platform=linux/amd64 alpine:3.21
 WORKDIR /app

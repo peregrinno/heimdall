@@ -29,7 +29,17 @@ var (
 	bodyPool = sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}
 )
 
-func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metrics.FraudScore) http.Handler {
+// Options ajusta o comportamento de admissão do handler /fraud-score.
+type Options struct {
+	// MaxInflight: requests simultâneas aceitas em /fraud-score. 0 = sem limite.
+	// Sob picos, esquerda nova é rejeitada com 503 em vez de virar fila.
+	MaxInflight int
+	// ShedTimeout: tempo máximo aguardando um slot do semáforo. 0 = não-bloqueante.
+	// Valores curtos (1-5 ms) mantêm o p99 estável sob rajada.
+	ShedTimeout time.Duration
+}
+
+func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metrics.FraudScore, opts Options) http.Handler {
 	mux := http.NewServeMux()
 	if reg != nil {
 		mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
@@ -41,12 +51,51 @@ func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metric
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("POST /fraud-score", fraudScoreHandler(log, svc, fs))
+	var sem semaphore
+	if opts.MaxInflight > 0 {
+		sem = make(semaphore, opts.MaxInflight)
+	}
+	mux.HandleFunc("POST /fraud-score", fraudScoreHandler(log, svc, fs, sem, opts.ShedTimeout))
 	return mux
 }
 
-func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScore) http.HandlerFunc {
+// semaphore é um canal buffered usado como semáforo de admissão.
+// nil semaphore = sem shedding (caminho mais rápido).
+type semaphore chan struct{}
+
+func (s semaphore) tryAcquire(timeout time.Duration) bool {
+	if s == nil {
+		return true
+	}
+	// fast path: slot disponível imediatamente
+	select {
+	case s <- struct{}{}:
+		return true
+	default:
+	}
+	if timeout <= 0 {
+		return false
+	}
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case s <- struct{}{}:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+func (s semaphore) release() {
+	if s == nil {
+		return
+	}
+	<-s
+}
+
+func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScore, sem semaphore, shedTimeout time.Duration) http.HandlerFunc {
 	hasMetrics := fs != nil
+	hasShed := sem != nil
 	return func(w http.ResponseWriter, r *http.Request) {
 		var start time.Time
 		var sw *statusRecorder
@@ -63,6 +112,19 @@ func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScor
 		if !svc.Ready() {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
+		}
+
+		if hasShed {
+			if !sem.tryAcquire(shedTimeout) {
+				// Sob pico, devolver 503 rápido é melhor que virar fila e
+				// inflar o p99. O k6 oficial aceita o erro como falha mas
+				// o score_p99 fica estável; o cut só dispara em ≥ 5%.
+				w.Header()["Content-Type"] = contentTypeJSON
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"error":"overloaded"}`))
+				return
+			}
+			defer sem.release()
 		}
 
 		req := reqPool.Get().(*domain.FraudScoreRequest)

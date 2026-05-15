@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -88,12 +89,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("HEIMDALL_DISABLE_GC") == "1" {
-		debug.SetGCPercent(-1)
-	}
 	if s := os.Getenv("HEIMDALL_MEM_LIMIT_BYTES"); s != "" {
 		if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 {
 			debug.SetMemoryLimit(n)
+		}
+	}
+
+	// Após o warmup, força um GC final para limpar lixo de startup
+	// e (opcionalmente) desliga o GC automático em troca de GC periódico.
+	// O hot path do handler usa sync.Pool e tem alocações mínimas, então
+	// rodar GC entre rajadas (a cada 5s) é mais barato que pausas STW
+	// imprevisíveis de 50–500 µs no meio de um request.
+	runtime.GC()
+	if os.Getenv("HEIMDALL_DISABLE_GC") == "1" {
+		debug.SetGCPercent(-1)
+		interval := durationSecEnv("HEIMDALL_GC_INTERVAL_SEC", 5)
+		if interval > 0 {
+			log.Info("GC automático desligado; GC periódico ativo", "interval_s", int(interval/time.Second))
+			go func() {
+				t := time.NewTicker(interval)
+				defer t.Stop()
+				for range t.C {
+					runtime.GC()
+				}
+			}()
 		}
 	}
 
@@ -120,7 +139,15 @@ func main() {
 	if g, ok := reg.(prometheus.Gatherer); ok {
 		gatherer = g
 	}
-	h := httpserver.New(log, svc, gatherer, fs)
+	shedSlots := getenvInt("HEIMDALL_SHED_SLOTS", 0)
+	shedTimeout := durationMsEnv("HEIMDALL_SHED_TIMEOUT_MS", 3)
+	if shedSlots > 0 {
+		log.Info("load shedding ativo", "slots", shedSlots, "timeout_ms", shedTimeout.Milliseconds())
+	}
+	h := httpserver.New(log, svc, gatherer, fs, httpserver.Options{
+		MaxInflight: shedSlots,
+		ShedTimeout: shedTimeout,
+	})
 	tmo := httpserver.ServerTimeouts{
 		ReadHeader: durationSecEnv("HTTP_READ_HEADER_TIMEOUT_SEC", 5),
 		Read:       durationSecEnv("HTTP_READ_TIMEOUT_SEC", 120),
@@ -241,4 +268,8 @@ func getenvInt(k string, def int) int {
 
 func durationSecEnv(k string, defSecs int) time.Duration {
 	return time.Duration(getenvInt(k, defSecs)) * time.Second
+}
+
+func durationMsEnv(k string, defMs int) time.Duration {
+	return time.Duration(getenvInt(k, defMs)) * time.Millisecond
 }

@@ -16,6 +16,10 @@
 coverage.*
 *.coverprofile
 profile.cov
+# cpuprofiles soltos; o default.pgo de produção fica em cmd/api/default.pgo
+*.cpuprof
+*.prof
+!cmd/api/default.pgo
 
 # Dependency directories (remove the comment below to include it)
 # vendor/

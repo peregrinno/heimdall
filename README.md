@@ -100,12 +100,9 @@ go run ./cmd/genrefs -in .\data\references.json.gz -out .\data\references.rbin
 go run ./cmd/genivf  -rbin .\data\references.rbin -out .\data\references.ivf -lists 2048 -iter 15 -workers 8
 ```
 
-Ou via Makefile (Linux/macOS/WSL):
-
-```bash
-make gendata       # rbin + ivf com 512 listas (rápido)
-make genivf-hq     # ivf com 2048 listas (melhor precisão, mais demorado)
-```
+Todos os comandos de operação (build, push, publish, atualização da branch
+`submission`, regerar perfil PGO, etc.) estão em
+[`docs/operacao-windows.md`](docs/operacao-windows.md).
 
 ### 2. Subir o stack
 
@@ -191,7 +188,8 @@ Mitigações aplicadas:
 
 ## Submissão à Rinha
 
-Tutorial passo a passo (branches, PR, issue `rinha/test`, k6 oficial): [`docs/submissao-e-teste-de-carga.md`](docs/submissao-e-teste-de-carga.md).
+- **Comandos completos (Windows / PowerShell):** [`docs/operacao-windows.md`](docs/operacao-windows.md)
+- **Tutorial conceitual da Rinha (branches, PR, issue `rinha/test`, k6):** [`docs/submissao-e-teste-de-carga.md`](docs/submissao-e-teste-de-carga.md)
 
 Resumo:
 

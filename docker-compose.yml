@@ -32,6 +32,10 @@ services:
       GOMAXPROCS: "2"
       GOGC: "200"
       HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_GC_INTERVAL_SEC: "5"
+      HEIMDALL_SHED_SLOTS: "32"
+      HEIMDALL_SHED_TIMEOUT_MS: "3"
       MIN_REFERENCES: "2000000"
       WARMUP: "1"
       METRICS: "0"
@@ -60,6 +64,10 @@ services:
       GOMAXPROCS: "2"
       GOGC: "200"
       HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_GC_INTERVAL_SEC: "5"
+      HEIMDALL_SHED_SLOTS: "32"
+      HEIMDALL_SHED_TIMEOUT_MS: "3"
       MIN_REFERENCES: "2000000"
       WARMUP: "1"
       METRICS: "0"
@@ -71,6 +79,26 @@ services:
         limits:
           cpus: "0.45"
           memory: "159M"
+
+  warmup:
+    image: curlimages/curl:8.10.1
+    platform: linux/amd64
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    environment:
+      BASE_URL: "http://lb:9999"
+      READY_RETRIES: "240"
+      READY_SLEEP: "0.25"
+      WARMUP_ROUNDS: "120"
+    volumes:
+      - ./scripts/warmup.sh:/warmup.sh:ro
+    depends_on:
+      - lb
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.02"
+          memory: "6M"
 
 volumes:
   lb_sockets:

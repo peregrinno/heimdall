@@ -61,18 +61,10 @@ go run ./cmd/genrefs -in .\data\references.json.gz -out .\data\references.rbin
 go run ./cmd/genivf -rbin .\data\references.rbin -out .\data\references.ivf -lists 512 -iter 12
 ```
 
-**Bash (Linux/macOS/WSL):**
-
-```bash
-make gendata
-```
-
-Ou manualmente:
-
-```bash
-go run ./cmd/genrefs -in ./data/references.json.gz -out ./data/references.rbin
-go run ./cmd/genivf -rbin ./data/references.rbin -out ./data/references.ivf -lists 512 -iter 12
-```
+> **Atalho Windows**: todos os comandos de operação (gerar dataset, build, push,
+> publish no Hub, sincronizar branch `submission`, regerar PGO) estão em
+> [`docs/operacao-windows.md`](operacao-windows.md). Os comandos abaixo são a
+> versão genérica.
 
 A conversão do `.rbin` demora alguns minutos. O `.ivf` roda **k-means em 3M pontos** — com **512 listas** costuma levar **5–15 min** (mostra progresso por iteração); com **2048 listas** pode passar de **1 hora**. O código `0xc000013a` no Windows costuma ser **Ctrl+C** ao cancelar. Sem estes ficheiros, o `docker-compose` falha no arranque (`MIN_REFERENCES=2000000` e `KNN_MODE=ivf`).
 
