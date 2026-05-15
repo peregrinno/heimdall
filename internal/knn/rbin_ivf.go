@@ -102,20 +102,10 @@ func siftDownIvfDesc(a []ivfCentroidDist, i int) {
 	}
 }
 
-func selectProbeListsBudget(cds []ivfCentroidDist, offs []uint32, maxCand, k int, dst []int) []int {
+func selectProbeLists(cds []ivfCentroidDist, dst []int) []int {
 	dst = dst[:0]
-	total := 0
 	for i := 0; i < len(cds); i++ {
-		ci := cds[i].idx
-		size := int(offs[ci+1] - offs[ci])
-		if i > 0 && total+size > maxCand {
-			break
-		}
-		dst = append(dst, ci)
-		total += size
-		if total >= maxCand && total >= k {
-			break
-		}
+		dst = append(dst, cds[i].idx)
 	}
 	return dst
 }
@@ -164,7 +154,7 @@ func FraudFractionRBinIVF(q *[reference.VectorDim]float64, data []byte, n int, i
 
 	cds := topProbesCentroids(*cdsPtr, &q32, cents, nList, wantProbe)
 	*cdsPtr = cds
-	lists := selectProbeListsBudget(cds, offs, maxCand, k, (*listsPtr)[:0])
+	lists := selectProbeLists(cds, (*listsPtr)[:0])
 	*listsPtr = lists
 	if len(lists) == 0 {
 		lists = append(lists, cds[0].idx)
@@ -202,5 +192,14 @@ func FraudFractionRBinIVF(q *[reference.VectorDim]float64, data []byte, n int, i
 			}
 		}
 	}
-	return fraudFractionFromCandidates(local[:k], k)
+	filled := 0
+	for i := 0; i < k; i++ {
+		if local[i].d2 < math.MaxFloat64 {
+			filled++
+		}
+	}
+	if filled == 0 {
+		return 0
+	}
+	return fraudFractionFromCandidates(local[:filled], k)
 }

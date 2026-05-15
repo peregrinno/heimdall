@@ -1,4 +1,6 @@
-.PHONY: default up genrefs genivf gendata
+.PHONY: default up genrefs genivf gendata docker-hub-build docker-hub-push
+
+IMAGE ?= peregrinno/heimdall:latest
 
 default: up
 
@@ -17,3 +19,15 @@ up:
 	docker compose down
 	docker compose build
 	docker compose up -d
+
+# Imagem para submissão (Rinha): embute references.rbin + references.ivf (~200MB).
+# Requer data/references.rbin e data/references.ivf (make gendata).
+docker-hub-build:
+	docker build --no-cache --platform linux/amd64 -f Dockerfile.hub \
+		--build-arg GIT_SHA=$$(git rev-parse --short HEAD) \
+		-t $(IMAGE) .
+
+docker-hub-push: docker-hub-build
+	docker push $(IMAGE)
+	@echo "Digest (use na branch submission para fixar a imagem):"
+	@docker image inspect $(IMAGE) --format '{{index .RepoDigests 0}}'

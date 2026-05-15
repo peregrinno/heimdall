@@ -27,8 +27,12 @@ const (
 	defaultMinReferences   = 2_000_000
 )
 
+// version é injetada no build de produção (-ldflags "-X main.version=...").
+var version = "dev"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	log.Info("heimdall", "version", version)
 
 	listen := getenv("LISTEN", ":8080")
 	dataDir := getenv("DATA_DIR", "./data")
