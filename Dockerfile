@@ -15,6 +15,6 @@ COPY --from=build /out/api /app/api
 COPY data/normalization.json data/mcc_risk.json /app/data/
 COPY --from=build /out/default-references.rbin /app/data/references.rbin
 ENV DATA_DIR=/app/data
-ENV REFERENCE_PATH=/app/data/references.rbin
+ENV REFERENCE_PATH=/data/references.rbin
 EXPOSE 8080
 ENTRYPOINT ["/app/api"]

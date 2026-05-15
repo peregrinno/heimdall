@@ -3,17 +3,48 @@ package reference
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
+	"runtime"
+	"sync"
+	"time"
 	"unsafe"
 )
 
-func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n int, nListOut int, centroids []float32, postingOffsets []uint32, postings []uint32, err error) {
+type TrainIVFConfig struct {
+	NList   int
+	MaxIter int
+	Seed    int64
+	Workers int
+	OnIter  func(iter, maxIter int, changed bool, elapsed time.Duration)
+}
+
+func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (int, int, []float32, []uint32, []uint32, error) {
+	return TrainIVFFromRBinConfig(rbinPath, TrainIVFConfig{
+		NList:   nList,
+		MaxIter: maxIter,
+		Seed:    seed,
+		Workers: 0,
+	})
+}
+
+func TrainIVFFromRBinConfig(rbinPath string, cfg TrainIVFConfig) (n int, nListOut int, centroids []float32, postingOffsets []uint32, postings []uint32, err error) {
+	nList := cfg.NList
+	maxIter := cfg.MaxIter
+	if maxIter < 1 {
+		maxIter = 1
+	}
+
+	log.Printf("ivf: a ler %s ...", rbinPath)
+	loadStart := time.Now()
 	mm, err := os.ReadFile(rbinPath)
 	if err != nil {
 		return 0, 0, nil, nil, nil, err
 	}
+	log.Printf("ivf: ficheiro lido (%d MB) em %s", len(mm)/(1024*1024), time.Since(loadStart).Round(time.Millisecond))
+
 	if len(mm) < RbinHeaderSize {
 		return 0, 0, nil, nil, nil, fmt.Errorf("rbin curto")
 	}
@@ -36,7 +67,15 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 		return 0, 0, nil, nil, nil, fmt.Errorf("rbin body curto")
 	}
 
-	rng := rand.New(rand.NewSource(seed))
+	workers := cfg.Workers
+	if workers < 1 {
+		workers = runtime.NumCPU()
+	}
+	if workers > n {
+		workers = n
+	}
+
+	rng := rand.New(rand.NewSource(cfg.Seed))
 	centroids = make([]float32, nList*VectorDim)
 	for j := 0; j < nList; j++ {
 		idx := j * n / nList
@@ -52,27 +91,16 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 	sum := make([]float64, nList*VectorDim)
 	counts := make([]int, nList)
 
+	log.Printf("ivf: k-means n=%d lists=%d iter<=%d workers=%d", n, nList, maxIter, workers)
+	trainStart := time.Now()
+
 	for iter := 0; iter < maxIter; iter++ {
+		iterStart := time.Now()
 		clear(sum)
 		clear(counts)
-		changed := false
-		for i := 0; i < n; i++ {
-			row := body[i*stride : i*stride+stride]
-			c := nearestCentroid(row, centroids, nList)
-			if int(assign[i]) != c {
-				changed = true
-			}
-			assign[i] = uint16(c)
-			counts[c]++
-			v := (*[VectorDim]float32)(unsafe.Pointer(&row[0]))
-			off := c * VectorDim
-			for d := 0; d < VectorDim; d++ {
-				sum[off+d] += float64(v[d])
-			}
-		}
+		changed := ivfAssignParallel(body, stride, centroids, nList, n, workers, assign, counts, sum)
 		for c := 0; c < nList; c++ {
 			if counts[c] == 0 {
-				// ressincroniza cluster vazio com linha aleatória
 				ri := rng.Intn(n)
 				row := body[ri*stride : ri*stride+stride]
 				v := (*[VectorDim]float32)(unsafe.Pointer(&row[0]))
@@ -85,7 +113,14 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 				centroids[off+d] = float32(sum[off+d] * inv)
 			}
 		}
+		elapsed := time.Since(iterStart)
+		if cfg.OnIter != nil {
+			cfg.OnIter(iter+1, maxIter, changed, elapsed)
+		} else {
+			log.Printf("ivf: iter %d/%d changed=%v elapsed=%s (total %s)", iter+1, maxIter, changed, elapsed.Round(time.Millisecond), time.Since(trainStart).Round(time.Second))
+		}
 		if !changed && iter > 0 {
+			log.Printf("ivf: convergiu na iter %d", iter+1)
 			break
 		}
 	}
@@ -110,7 +145,64 @@ func TrainIVFFromRBin(rbinPath string, nList int, maxIter int, seed int64) (n in
 			return 0, 0, nil, nil, nil, fmt.Errorf("ivf interno: cluster %d head %d fim %d", c, head[c], postingOffsets[c+1])
 		}
 	}
+	log.Printf("ivf: postings prontos em %s", time.Since(trainStart).Round(time.Second))
 	return n, nListOut, centroids, postingOffsets, postings, nil
+}
+
+func ivfAssignParallel(body []byte, stride int, centroids []float32, nList, n, workers int, assign []uint16, counts []int, sum []float64) bool {
+	per := (n + workers - 1) / workers
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	changed := false
+
+	for w := 0; w < workers; w++ {
+		start := w * per
+		if start >= n {
+			break
+		}
+		end := start + per
+		if end > n {
+			end = n
+		}
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			lc := make([]int, nList)
+			ls := make([]float64, nList*VectorDim)
+			localChanged := false
+			for i := start; i < end; i++ {
+				row := body[i*stride : i*stride+stride]
+				c := nearestCentroid(row, centroids, nList)
+				if int(assign[i]) != c {
+					localChanged = true
+				}
+				assign[i] = uint16(c)
+				lc[c]++
+				v := (*[VectorDim]float32)(unsafe.Pointer(&row[0]))
+				off := c * VectorDim
+				for d := 0; d < VectorDim; d++ {
+					ls[off+d] += float64(v[d])
+				}
+			}
+			mu.Lock()
+			if localChanged {
+				changed = true
+			}
+			for c := 0; c < nList; c++ {
+				counts[c] += lc[c]
+				if lc[c] == 0 {
+					continue
+				}
+				off := c * VectorDim
+				for d := 0; d < VectorDim; d++ {
+					sum[off+d] += ls[off+d]
+				}
+			}
+			mu.Unlock()
+		}(start, end)
+	}
+	wg.Wait()
+	return changed
 }
 
 func nearestCentroid(row []byte, centroids []float32, nList int) int {

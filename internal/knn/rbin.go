@@ -1,7 +1,6 @@
 package knn
 
 import (
-	"encoding/binary"
 	"math"
 	"os"
 	"runtime"
@@ -11,7 +10,6 @@ import (
 	"unsafe"
 
 	"heimdall/internal/reference"
-	"heimdall/internal/vector"
 )
 
 type rbinCand struct {
@@ -126,20 +124,10 @@ func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) floa
 		return 0
 	}
 	stride := reference.RbinRowStride
-	ver := binary.LittleEndian.Uint32(data[4:8])
 	hdrSz := reference.RbinBodyOffset(data)
 	body := data[hdrSz:]
 
-	var qPart uint8
-	if ver >= reference.RbinVersion2 {
-		qPart = vector.PartitionKey(q)
-	}
-
-	rowStart, rowEnd := reference.RbinPartitionRowRange(data, ver, qPart)
-	if ver != reference.RbinVersion3 {
-		rowStart, rowEnd = 0, n
-	}
-	usePart := ver == reference.RbinVersion2
+	rowStart, rowEnd := 0, n
 
 	scanN := rowEnd - rowStart
 	k := kNeighbors
@@ -153,7 +141,7 @@ func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) floa
 	w := knnWorkers()
 	if w < 2 || scanN < knnParallelMinScan() {
 		local := make([]rbinCand, k)
-		nf := topKInRangeRBinInto(local, q, body, stride, rowStart, rowEnd, k, usePart, qPart)
+		nf := topKInRangeRBinInto(local, q, body, stride, rowStart, rowEnd, k, false, 0)
 		return fraudFractionFromCandidates(local[:nf], k)
 	}
 
@@ -175,7 +163,7 @@ func FraudFractionRBin(q *[reference.VectorDim]float64, data []byte, n int) floa
 		wg.Add(1)
 		go func(wi, start, end int) {
 			defer wg.Done()
-			nfills[wi] = topKInRangeRBinInto(buf[wi*k:(wi+1)*k], q, body, stride, start, end, k, usePart, qPart)
+			nfills[wi] = topKInRangeRBinInto(buf[wi*k:(wi+1)*k], q, body, stride, start, end, k, false, 0)
 		}(wi, start, end)
 	}
 	wg.Wait()

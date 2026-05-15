@@ -75,9 +75,9 @@ O script oficial do k6 usa **timeout de 2001 ms** por requisição. O gargalo co
 
 Neste projeto:
 
-- Com **vários núcleos** visíveis para o Go, o KNN em `.rbin` usa **partição + merge exato** (cada faixa devolve os 5 melhores; o top-5 global está na união).
-- **`KNN_WORKERS`**: número de goroutines de partição (default: `GOMAXPROCS`, máx. 16). O `docker-compose.yml` define **`KNN_WORKERS: "8"`** nas APIs — ajuste conforme sua máquina.
-- Se o processo enxergar **apenas 1 CPU** (`GOMAXPROCS=1`), o caminho permanece **serial** e tende a **estourar 2 s** sob carga alta. Opções: mais CPU no compose (teste local), API **fora** do Docker com mais núcleos, ou **índice vetorial (ANN)** + re-ranking (ver `roadmap/observabilidade-e-proximos-passos.md`).
+- O KNN em `.rbin` faz **scan exato** em ~3M vetores (com paralelismo opcional via `KNN_WORKERS`).
+- O `docker-compose.yml` de submissão usa **`GOMAXPROCS=1`** e **`KNN_WORKERS=1`** por réplica (0,45 CPU cada), alinhado ao limite da Rinha.
+- Sob **~900 req/s** (script k6 oficial), o p99 pode ultrapassar **2001 ms** — veja [submissao-e-teste-de-carga.md](./submissao-e-teste-de-carga.md) para rodar o teste real e interpretar `test/results.json`.
 
 ---
 
@@ -89,4 +89,4 @@ No push e em pull requests para `main`, o workflow `.github/workflows/ci.yml` ex
 
 ## Teste de carga oficial (Rinha)
 
-O repositório do desafio contém scripts e cenários (`run.sh`, pasta `test/`). Use-os quando quiser medir **p99** e pontuação real; isso é independente dos testes `go test` deste módulo.
+Tutorial completo (clone do repo da Rinha, k6, `results.json`, issue de prévia): **[submissao-e-teste-de-carga.md](./submissao-e-teste-de-carga.md)**.

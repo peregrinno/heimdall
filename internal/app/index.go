@@ -15,7 +15,7 @@ type ReferenceIndex interface {
 }
 
 type ReferenceIndexConfig struct {
-	// KNNMode "exact" (padrão) ou "ivf" (ANN + re-ranking exato sobre candidatos).
+	// KNNMode "auto" (usa .ivf se existir), "ivf", ou "exact".
 	KNNMode string
 	// IVFPath caminho do .ivf; vazio + modo ivf → mesmo diretório do .rbin com sufixo .ivf
 	IVFPath    string
@@ -39,37 +39,40 @@ func OpenReferenceIndex(refPath string, cfg ReferenceIndexConfig) (ReferenceInde
 		if err != nil {
 			return nil, err
 		}
-		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 24, maxCand: 300_000}
+		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 8, maxCand: 15_000}
 		mode := strings.ToLower(strings.TrimSpace(cfg.KNNMode))
 		if mode == "" {
 			mode = "exact"
 		}
-		if mode == "ivf" {
-			ivfPath := strings.TrimSpace(cfg.IVFPath)
-			if ivfPath == "" {
-				if i := strings.LastIndex(lower, ".rbin"); i >= 0 {
-					ivfPath = refPath[:i] + ".ivf"
-				} else {
-					ivfPath = refPath + ".ivf"
-				}
+		ivfPath := strings.TrimSpace(cfg.IVFPath)
+		if ivfPath == "" {
+			if i := strings.LastIndex(lower, ".rbin"); i >= 0 {
+				ivfPath = refPath[:i] + ".ivf"
+			} else {
+				ivfPath = refPath + ".ivf"
 			}
+		}
+		if mode == "auto" || mode == "ivf" {
 			ivf, err := reference.OpenMappedIVF(ivfPath)
 			if err != nil {
-				_ = m.Close()
-				return nil, fmt.Errorf("ivf %s: %w", ivfPath, err)
-			}
-			if err := ivf.ValidateN(m.Len()); err != nil {
-				_ = ivf.Close()
-				_ = m.Close()
-				return nil, err
-			}
-			h.ivf = ivf
-			h.mode = "ivf"
-			if cfg.IVFProbes > 0 {
-				h.nprobe = cfg.IVFProbes
-			}
-			if cfg.IVFMaxCand > 0 {
-				h.maxCand = cfg.IVFMaxCand
+				if mode == "ivf" {
+					_ = m.Close()
+					return nil, fmt.Errorf("ivf %s: %w", ivfPath, err)
+				}
+			} else {
+				if err := ivf.ValidateN(m.Len()); err != nil {
+					_ = ivf.Close()
+					_ = m.Close()
+					return nil, err
+				}
+				h.ivf = ivf
+				h.mode = "ivf"
+				if cfg.IVFProbes > 0 {
+					h.nprobe = cfg.IVFProbes
+				}
+				if cfg.IVFMaxCand > 0 {
+					h.maxCand = cfg.IVFMaxCand
+				}
 			}
 		}
 		return h, nil

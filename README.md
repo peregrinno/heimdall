@@ -101,7 +101,7 @@ docker compose up -d --build
 
 ## Submissão à Rinha
 
-Branches `main` / `submission`, `docker-compose` na raiz da submission, PR em `participants/`, issue com `rinha/test` — ver [SUBMISSAO.md](https://github.com/zanfranceschi/rinha-de-backend-2026/blob/main/docs/br/SUBMISSAO.md).
+Tutorial passo a passo (dados, branches, PR, k6 oficial): [`docs/submissao-e-teste-de-carga.md`](docs/submissao-e-teste-de-carga.md). Regras gerais: [SUBMISSAO.md](https://github.com/zanfranceschi/rinha-de-backend-2026/blob/main/docs/br/SUBMISSAO.md).
 
 ---
 

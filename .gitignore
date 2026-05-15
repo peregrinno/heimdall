@@ -62,3 +62,6 @@ debug.test
 # Vim / emacs temporários
 *.swp
 *~
+.cursor/
+*.gz
+*.rbin

@@ -22,7 +22,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const embeddedReferencesRBin = "/app/data/references.rbin"
+const (
+	embeddedReferencesRBin = "/app/data/references.rbin"
+	defaultMinReferences   = 2_000_000
+)
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -46,18 +49,30 @@ func main() {
 	}
 
 	log.Info("carregando referências", "path", refPath)
-	knnMode := getenv("KNN_MODE", "exact")
+	knnMode := getenv("KNN_MODE", "auto")
 	idx, err := app.OpenReferenceIndex(refPath, app.ReferenceIndexConfig{
 		KNNMode:    knnMode,
 		IVFPath:    getenv("REFERENCE_IVF_PATH", ""),
-		IVFProbes:  getenvInt("KNN_NPROBE", 24),
-		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 300_000),
+		IVFProbes:  getenvInt("KNN_NPROBE", 8),
+		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 15_000),
 	})
 	if err != nil {
 		log.Error("referências", "path", refPath, "err", err)
 		os.Exit(1)
 	}
 	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode)
+
+	minRefs := getenvInt("MIN_REFERENCES", defaultMinReferences)
+	if minRefs > 0 && idx.Len() < minRefs {
+		log.Error(
+			"dataset de referências insuficiente para a Rinha",
+			"n", idx.Len(),
+			"min", minRefs,
+			"path", refPath,
+			"hint", "gere data/references.rbin a partir de references.json.gz e monte em /data; use MIN_REFERENCES=0 ou ALLOW_SMALL_REFERENCES=1 só em desenvolvimento",
+		)
+		os.Exit(1)
+	}
 
 	if os.Getenv("HEIMDALL_DISABLE_GC") == "1" {
 		debug.SetGCPercent(-1)
@@ -68,16 +83,30 @@ func main() {
 		}
 	}
 
-	reg := prometheus.NewRegistry()
-	fs := metrics.RegisterFraudScore(reg)
+	var reg prometheus.Registerer = prometheus.NewRegistry()
+	var fs *metrics.FraudScore
+	if getenv("METRICS", "0") == "1" {
+		g := prometheus.NewRegistry()
+		reg = g
+		fs = metrics.RegisterFraudScore(g)
+	}
 
-	svc := app.NewService(log, norm, mcc, idx, fs.KNNDuration)
+	var knnObs prometheus.Observer
+	if fs != nil {
+		knnObs = fs.KNNDuration
+	}
+
+	svc := app.NewService(log, norm, mcc, idx, knnObs)
 	defer func() {
 		if err := svc.Close(); err != nil {
 			log.Warn("fechar serviço", "err", err)
 		}
 	}()
-	h := httpserver.New(log, svc, reg, fs)
+	var gatherer prometheus.Gatherer
+	if g, ok := reg.(prometheus.Gatherer); ok {
+		gatherer = g
+	}
+	h := httpserver.New(log, svc, gatherer, fs)
 	tmo := httpserver.ServerTimeouts{
 		ReadHeader: durationSecEnv("HTTP_READ_HEADER_TIMEOUT_SEC", 5),
 		Read:       durationSecEnv("HTTP_READ_TIMEOUT_SEC", 120),
@@ -156,9 +185,15 @@ func pickReferencePath(refPath string, log *slog.Logger) string {
 	if st, err := os.Stat(refPath); err == nil && !st.IsDir() {
 		return refPath
 	}
-	if st, err := os.Stat(embeddedReferencesRBin); err == nil && !st.IsDir() {
-		log.Info("referências", "path", refPath, "msg", "ficheiro ausente, a usar embutido na imagem", "fallback", embeddedReferencesRBin)
-		return embeddedReferencesRBin
+	if os.Getenv("ALLOW_SMALL_REFERENCES") == "1" {
+		if st, err := os.Stat(embeddedReferencesRBin); err == nil && !st.IsDir() {
+			log.Warn(
+				"referências de desenvolvimento embutidas",
+				"requested", refPath,
+				"fallback", embeddedReferencesRBin,
+			)
+			return embeddedReferencesRBin
+		}
 	}
 	return refPath
 }

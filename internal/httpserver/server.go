@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"sync"
 	"time"
 
 	"heimdall/internal/app"
@@ -12,6 +14,15 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	bodyApprovedTrue  = []byte(`{"approved":true,"fraud_score":`)
+	bodyApprovedFalse = []byte(`{"approved":false,"fraud_score":`)
+	bodyClose         = []byte("}")
+
+	respPool = sync.Pool{New: func() any { b := make([]byte, 0, 96); return &b }}
+	reqPool  = sync.Pool{New: func() any { return new(domain.FraudScoreRequest) }}
 )
 
 func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metrics.FraudScore) http.Handler {
@@ -31,45 +42,63 @@ func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metric
 }
 
 func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScore) http.HandlerFunc {
+	hasMetrics := fs != nil
 	return func(w http.ResponseWriter, r *http.Request) {
-		var deferObs func()
-		if fs != nil {
-			sw := &statusRecorder{ResponseWriter: w}
+		var start time.Time
+		var sw *statusRecorder
+		if hasMetrics {
+			sw = &statusRecorder{ResponseWriter: w}
 			w = sw
-			start := time.Now()
-			deferObs = func() {
+			start = time.Now()
+			defer func() {
 				fs.HandlerSeconds.Observe(time.Since(start).Seconds())
 				fs.Responses.WithLabelValues(httpStatusClass(sw.status())).Inc()
-			}
-		}
-		if deferObs != nil {
-			defer deferObs()
+			}()
 		}
 
 		if !svc.Ready() {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
 		}
-		defer func() { _ = r.Body.Close() }()
-		dec := json.NewDecoder(r.Body)
-		var req domain.FraudScoreRequest
-		if err := dec.Decode(&req); err != nil {
+
+		req := reqPool.Get().(*domain.FraudScoreRequest)
+		req.LastTransaction = nil
+		req.Customer.KnownMerchants = req.Customer.KnownMerchants[:0]
+		defer func() {
+			_ = r.Body.Close()
+			reqPool.Put(req)
+		}()
+
+		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 			log.Warn("decode fraud-score", "err", err)
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}
-		ctx := r.Context()
-		out, err := svc.Score(ctx, req)
+
+		out, err := svc.Score(r.Context(), *req)
 		if err != nil {
 			log.Error("score", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		enc := json.NewEncoder(w)
-		if err := enc.Encode(out); err != nil {
-			log.Warn("encode response", "err", err)
+
+		bufPtr := respPool.Get().(*[]byte)
+		buf := (*bufPtr)[:0]
+		if out.Approved {
+			buf = append(buf, bodyApprovedTrue...)
+		} else {
+			buf = append(buf, bodyApprovedFalse...)
 		}
+		buf = strconv.AppendFloat(buf, out.FraudScore, 'f', -1, 64)
+		buf = append(buf, bodyClose...)
+
+		h := w.Header()
+		h["Content-Type"] = []string{"application/json"}
+		h["Content-Length"] = []string{strconv.Itoa(len(buf))}
+		_, _ = w.Write(buf)
+
+		*bufPtr = buf
+		respPool.Put(bufPtr)
 	}
 }
 
@@ -120,9 +149,9 @@ type ServerTimeouts struct {
 func DefaultServerTimeouts() ServerTimeouts {
 	return ServerTimeouts{
 		ReadHeader: 5 * time.Second,
-		Read:       120 * time.Second,
-		Write:      120 * time.Second,
-		Idle:       60 * time.Second,
+		Read:       10 * time.Second,
+		Write:      10 * time.Second,
+		Idle:       120 * time.Second,
 	}
 }
 

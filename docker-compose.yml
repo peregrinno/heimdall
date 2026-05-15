@@ -13,7 +13,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
+          cpus: "0.10"
           memory: "32M"
 
   api-1:
@@ -22,8 +22,19 @@ services:
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
       REFERENCE_PATH: /data/references.rbin
+      REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
-      KNN_WORKERS: "2"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "8"
+      KNN_IVF_MAX_CANDIDATES: "15000"
+      KNN_WORKERS: "0"
+      KNN_PARALLEL_MIN_SCAN: "200000000"
+      GOMAXPROCS: "1"
+      GOGC: "off"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_MEM_LIMIT_BYTES: "140000000"
+      MIN_REFERENCES: "2000000"
+      METRICS: "0"
     volumes:
       - ./data:/data:ro
       - lb_sockets:/run/sockets
@@ -31,7 +42,7 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "150M"
+          memory: "159M"
 
   api-2:
     build: .
@@ -39,8 +50,19 @@ services:
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
       REFERENCE_PATH: /data/references.rbin
+      REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
-      KNN_WORKERS: "2"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "8"
+      KNN_IVF_MAX_CANDIDATES: "15000"
+      KNN_WORKERS: "0"
+      KNN_PARALLEL_MIN_SCAN: "200000000"
+      GOMAXPROCS: "1"
+      GOGC: "off"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_MEM_LIMIT_BYTES: "140000000"
+      MIN_REFERENCES: "2000000"
+      METRICS: "0"
     volumes:
       - ./data:/data:ro
       - lb_sockets:/run/sockets
@@ -48,7 +70,7 @@ services:
       resources:
         limits:
           cpus: "0.45"
-          memory: "150M"
+          memory: "159M"
 
 volumes:
   lb_sockets:
