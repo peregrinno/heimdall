@@ -42,9 +42,6 @@ Desktop.ini
 /api
 /genrefs
 
-# Datasets grandes da Rinha (gerar/baixar localmente; manter no repo só JSONs pequenos)
-data/references.json.gz
-
 # Resultado de teste de carga k6 (se correres o script do repo da Rinha nesta pasta)
 test/results.json
 
