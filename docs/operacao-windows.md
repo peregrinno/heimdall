@@ -215,6 +215,13 @@ A `submission` usa **digest fixo** (`image: peregrinno/heimdall@sha256:...`) par
 evitar `:latest` ambíguo no runner da Rinha. Trabalhamos via `git worktree` para
 não poluir a `main`.
 
+> **Importante**: o `docker-compose.yml` da `submission` é **gerado a partir
+> de um template canônico** em `deploy/docker-compose.submission.yml`.
+> **Nunca copie** o `docker-compose.yml` da `main` direto para a submission —
+> ele tem `build: .` (sem `Dockerfile`), o que **quebra o smoke test da Rinha**
+> com `failed to read dockerfile: open Dockerfile: no such file or directory`.
+> Use sempre o script `sync-submission.ps1`.
+
 ### 6.1 Criar worktree (uma vez)
 
 ```powershell
@@ -234,40 +241,44 @@ git worktree remove ..\heimdall-submission   # quando terminar
 .\scripts\sync-submission.ps1
 ```
 
-O script lê o digest atual de `peregrinno/heimdall:latest` (já no `docker image inspect`
-após o push), troca a linha `image:` no `docker-compose.yml` da submission,
-copia `scripts/warmup.sh` e `deploy/haproxy.cfg`, e faz commit + push.
+O script:
 
-### 6.3 Manual
+1. Lê o digest atual de `peregrinno/heimdall:latest` (`docker image inspect`).
+2. Copia `deploy/docker-compose.submission.yml` (template canônico) para
+   `..\heimdall-submission\docker-compose.yml`, substituindo `PLACEHOLDER_DIGEST`
+   pelo digest real.
+3. Verifica que o digest aparece **2x** (api-1 + api-2) — se não, aborta.
+4. Copia `scripts/warmup.sh`, `deploy/haproxy.cfg` e `.gitattributes` da `main`.
+5. Faz commit + push na `submission`.
 
-Na pasta `..\heimdall-submission\`:
+Para forçar um digest específico (útil em rollback):
 
-1. Editar `docker-compose.yml`: trocar o `sha256:...` antigo pelo novo.
-2. Copiar ficheiros suportes recém-modificados na `main`:
+```powershell
+.\scripts\sync-submission.ps1 -Digest sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
+```
 
-   ```powershell
-   cd ..\heimdall-submission
-   Copy-Item ..\heimdall\scripts\warmup.sh   .\scripts\warmup.sh   -Force
-   Copy-Item ..\heimdall\deploy\haproxy.cfg  .\deploy\haproxy.cfg  -Force
-   ```
+### 6.3 Manual (não recomendado)
 
-3. Commit + push:
+1. Editar `deploy/docker-compose.submission.yml` na `main` se for mudar envs.
+2. Rodar `sync-submission.ps1` para gerar o compose da submission.
 
-   ```powershell
-   git add .
-   git commit -m "submission: pin image @ <commit_curto> + tunings"
-   git push origin submission
-   cd ..\heimdall
-   ```
+Editar direto `..\heimdall-submission\docker-compose.yml` é **anti-pattern**:
+qualquer próximo `sync-submission.ps1` sobrescreve a edição.
 
-### 6.4 Automatizar só o pin de digest (opcional)
+### 6.4 Por que não há workflow automático de sync
 
-Há um workflow `.github/workflows/sync-submission.yml` que, após o CI verde na
-`main`, lê o digest do Docker Hub e atualiza só a linha `image:` na
-`submission`. Mudanças em `haproxy.cfg`/`scripts/` continuam manuais.
+Existia `.github/workflows/sync-submission.yml` que tentava propagar o digest
+após cada CI verde, mas foi **removido** porque:
 
-Para forçar manualmente: **GitHub → Actions → Sync submission digest → Run workflow**,
-preenche o campo `image_digest` se quiser fixar um específico.
+- Só mexia na linha `image:` (não copiava `haproxy.cfg`, `warmup.sh`,
+  `.gitattributes`), gerando submission meio-pinada / meio-divergente.
+- Disparava a cada commit verde da `main`, mesmo sem build/push novo,
+  criando commits ruidosos com digest desatualizado.
+- O `sed` falhava silenciosamente quando o compose estava em estado
+  inesperado (ex.: tinha `build: .`).
+
+Para o ciclo "build → push → submission", use sempre `sync-submission.ps1`
+localmente após `build-push.ps1`. É o único caminho de verdade.
 
 ---
 
@@ -390,7 +401,29 @@ if (Test-Path cmd\api\default) { Move-Item cmd\api\default cmd\api\default.pgo -
 
 A branch `submission` precisa do script copiado (ver **§6.2** passo 2).
 
-### 9.8 `warmup-1 | /warmup.sh: set: line 7: illegal option -`
+### 9.8 `target api-1: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`
+
+Erro no smoke test do PR de submissão (CI da Rinha). Causa: o
+`docker-compose.yml` da branch `submission` tem `build: .` em vez de
+`image: peregrinno/heimdall@sha256:...`. O repo da `submission` não tem
+`Dockerfile` (só `Dockerfile.hub`), então o build falha.
+
+Causa-raiz típica: alguém copiou `docker-compose.yml` da `main` para a
+`submission` com `Copy-Item` (ou no editor) em vez de rodar
+`sync-submission.ps1`. O compose da `main` tem `build: .` por design (dev local).
+
+Fix:
+
+```powershell
+.\scripts\sync-submission.ps1
+# ou, para forçar um digest específico (rollback):
+.\scripts\sync-submission.ps1 -Digest sha256:<64-hex>
+```
+
+O script usa o template `deploy/docker-compose.submission.yml` (com `image:`)
+e nunca volta a colocar `build: .`.
+
+### 9.9 `warmup-1 | /warmup.sh: set: line 7: illegal option -`
 
 Causa: Docker Desktop no Windows às vezes injeta CRLF em **bind mounts de
 arquivo único**, mesmo quando o arquivo no disco está em LF. O `\r` final
@@ -466,16 +499,13 @@ $digest = (docker image inspect peregrinno/heimdall:latest `
 $digest = ($digest -split "@")[1]
 Write-Host "Digest: $digest"
 
-# 5. Atualizar submission
-cd ..\heimdall-submission
-# editar docker-compose.yml: trocar @sha256:... pelo $digest
-Copy-Item ..\heimdall\scripts\warmup.sh   .\scripts\warmup.sh   -Force
-Copy-Item ..\heimdall\deploy\haproxy.cfg  .\deploy\haproxy.cfg  -Force
-git add .
-git commit -m "submission: pin @ $($digest.Substring(7,12))"
-git push origin submission
+# 5. Atualizar submission via template canônico
+.\scripts\sync-submission.ps1 -Digest $digest
 
 # 6. Push da main
-cd ..\heimdall
 git push origin main
 ```
+
+> **Nunca** editar manualmente `..\heimdall-submission\docker-compose.yml` ou
+> copiar o `docker-compose.yml` da `main` para lá: o template em
+> `deploy/docker-compose.submission.yml` é a fonte de verdade.
