@@ -44,7 +44,6 @@ Desktop.ini
 
 # Datasets grandes da Rinha (gerar/baixar localmente; manter no repo só JSONs pequenos)
 data/references.json.gz
-data/references.rbin
 
 # Resultado de teste de carga k6 (se correres o script do repo da Rinha nesta pasta)
 test/results.json
