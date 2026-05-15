@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -21,8 +22,11 @@ var (
 	bodyApprovedFalse = []byte(`{"approved":false,"fraud_score":`)
 	bodyClose         = []byte("}")
 
-	respPool = sync.Pool{New: func() any { b := make([]byte, 0, 96); return &b }}
+	contentTypeJSON = []string{"application/json"}
+
+	respPool = sync.Pool{New: func() any { b := make([]byte, 0, 64); return &b }}
 	reqPool  = sync.Pool{New: func() any { return new(domain.FraudScoreRequest) }}
+	bodyPool = sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}
 )
 
 func New(log *slog.Logger, svc *app.Service, reg prometheus.Gatherer, fs *metrics.FraudScore) http.Handler {
@@ -64,12 +68,25 @@ func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScor
 		req := reqPool.Get().(*domain.FraudScoreRequest)
 		req.LastTransaction = nil
 		req.Customer.KnownMerchants = req.Customer.KnownMerchants[:0]
+		bodyPtr := bodyPool.Get().(*[]byte)
 		defer func() {
 			_ = r.Body.Close()
 			reqPool.Put(req)
+			*bodyPtr = (*bodyPtr)[:0]
+			bodyPool.Put(bodyPtr)
 		}()
 
-		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		body := (*bodyPtr)[:cap(*bodyPtr)]
+		nRead, err := readAllInto(r.Body, body)
+		if err != nil {
+			log.Warn("read body", "err", err)
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		body = body[:nRead]
+		*bodyPtr = body
+
+		if err := json.Unmarshal(body, req); err != nil {
 			log.Warn("decode fraud-score", "err", err)
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
@@ -93,13 +110,41 @@ func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScor
 		buf = append(buf, bodyClose...)
 
 		h := w.Header()
-		h["Content-Type"] = []string{"application/json"}
-		h["Content-Length"] = []string{strconv.Itoa(len(buf))}
+		h["Content-Type"] = contentTypeJSON
 		_, _ = w.Write(buf)
 
 		*bufPtr = buf
 		respPool.Put(bufPtr)
 	}
+}
+
+func readAllInto(r io.Reader, buf []byte) (int, error) {
+	total := 0
+	for total < len(buf) {
+		n, err := r.Read(buf[total:])
+		total += n
+		if err != nil {
+			if err == io.EOF {
+				return total, nil
+			}
+			return total, err
+		}
+	}
+	overflow := [128]byte{}
+	for {
+		n, err := r.Read(overflow[:])
+		total += n
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return total, err
+		}
+		if n == 0 {
+			break
+		}
+	}
+	return total, nil
 }
 
 type statusRecorder struct {

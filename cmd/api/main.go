@@ -53,8 +53,8 @@ func main() {
 	idx, err := app.OpenReferenceIndex(refPath, app.ReferenceIndexConfig{
 		KNNMode:    knnMode,
 		IVFPath:    getenv("REFERENCE_IVF_PATH", ""),
-		IVFProbes:  getenvInt("KNN_NPROBE", 8),
-		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 15_000),
+		IVFProbes:  getenvInt("KNN_NPROBE", 6),
+		IVFMaxCand: getenvInt("KNN_IVF_MAX_CANDIDATES", 8_000),
 	})
 	if err != nil {
 		log.Error("referências", "path", refPath, "err", err)

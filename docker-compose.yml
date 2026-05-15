@@ -25,8 +25,8 @@ services:
       REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
-      KNN_NPROBE: "8"
-      KNN_IVF_MAX_CANDIDATES: "15000"
+      KNN_NPROBE: "6"
+      KNN_IVF_MAX_CANDIDATES: "8000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
       GOMAXPROCS: "1"
@@ -53,8 +53,8 @@ services:
       REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
-      KNN_NPROBE: "8"
-      KNN_IVF_MAX_CANDIDATES: "15000"
+      KNN_NPROBE: "6"
+      KNN_IVF_MAX_CANDIDATES: "8000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
       GOMAXPROCS: "1"

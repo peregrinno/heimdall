@@ -39,7 +39,7 @@ func OpenReferenceIndex(refPath string, cfg ReferenceIndexConfig) (ReferenceInde
 		if err != nil {
 			return nil, err
 		}
-		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 8, maxCand: 15_000}
+		h := &hybridIndex{mmap: m, mode: "exact", nprobe: 6, maxCand: 8_000}
 		mode := strings.ToLower(strings.TrimSpace(cfg.KNNMode))
 		if mode == "" {
 			mode = "exact"
