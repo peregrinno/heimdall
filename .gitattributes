@@ -1,0 +1,23 @@
+# Garante que scripts shell e arquivos de config sigam sempre LF,
+# independentemente do core.autocrlf do clone. Sem isso, Windows quebra
+# bind mounts em /bin/sh com erros tipo "illegal option -" (CR após -e).
+*.sh            text eol=lf
+*.bash          text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.cfg           text eol=lf
+*.conf          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+Makefile        text eol=lf
+.dockerignore   text eol=lf
+.gitignore      text eol=lf
+
+# Binários e dados — nunca normalizar.
+*.rbin          binary
+*.ivf           binary
+*.pgo           binary
+*.png           binary
+*.jpg           binary
+*.gz            binary

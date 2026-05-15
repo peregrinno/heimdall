@@ -1,4 +1,4 @@
-services:
+﻿services:
   lb:
     image: haproxy:2.8-alpine
     platform: linux/amd64
@@ -17,25 +17,30 @@ services:
           memory: "32M"
 
   api-1:
-    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
+    build: .
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
-      REFERENCE_PATH: /app/data/references.rbin
-      REFERENCE_IVF_PATH: /app/data/references.ivf
+      REFERENCE_PATH: /data/references.rbin
+      REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
-      KNN_MODE: "auto"
-      KNN_NPROBE: "16"
-      KNN_IVF_MAX_CANDIDATES: "10000"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "12"
+      KNN_IVF_MAX_CANDIDATES: "4000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
-      GOMAXPROCS: "1"
+      GOMAXPROCS: "2"
       GOGC: "200"
       HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_GC_INTERVAL_SEC: "5"
+      HEIMDALL_SHED_SLOTS: "32"
+      HEIMDALL_SHED_TIMEOUT_MS: "3"
       MIN_REFERENCES: "2000000"
       WARMUP: "1"
       METRICS: "0"
     volumes:
+      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
@@ -44,31 +49,59 @@ services:
           memory: "159M"
 
   api-2:
-    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
+    build: .
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
-      REFERENCE_PATH: /app/data/references.rbin
-      REFERENCE_IVF_PATH: /app/data/references.ivf
+      REFERENCE_PATH: /data/references.rbin
+      REFERENCE_IVF_PATH: /data/references.ivf
       DATA_DIR: /app/data
-      KNN_MODE: "auto"
-      KNN_NPROBE: "16"
-      KNN_IVF_MAX_CANDIDATES: "10000"
+      KNN_MODE: "ivf"
+      KNN_NPROBE: "12"
+      KNN_IVF_MAX_CANDIDATES: "4000"
       KNN_WORKERS: "0"
       KNN_PARALLEL_MIN_SCAN: "200000000"
-      GOMAXPROCS: "1"
+      GOMAXPROCS: "2"
       GOGC: "200"
       HEIMDALL_MEM_LIMIT_BYTES: "120000000"
+      HEIMDALL_DISABLE_GC: "1"
+      HEIMDALL_GC_INTERVAL_SEC: "5"
+      HEIMDALL_SHED_SLOTS: "32"
+      HEIMDALL_SHED_TIMEOUT_MS: "3"
       MIN_REFERENCES: "2000000"
       WARMUP: "1"
       METRICS: "0"
     volumes:
+      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
         limits:
           cpus: "0.45"
           memory: "159M"
+
+  warmup:
+    image: curlimages/curl:8.10.1
+    platform: linux/amd64
+    # `sh -e` no entrypoint evita ter que usar `set -e` dentro do script
+    # (mais resiliente a CRLF de bind mounts no Docker Desktop Windows).
+    entrypoint: ["/bin/sh", "-e", "/scripts/warmup.sh"]
+    environment:
+      BASE_URL: "http://lb:9999"
+      READY_RETRIES: "240"
+      READY_SLEEP: "0.25"
+      WARMUP_ROUNDS: "120"
+    volumes:
+      # Bind do diretÃ³rio (nÃ£o do arquivo Ãºnico) Ã© mais estÃ¡vel no Windows.
+      - ./scripts:/scripts:ro
+    depends_on:
+      - lb
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.02"
+          memory: "6M"
 
 volumes:
   lb_sockets:
