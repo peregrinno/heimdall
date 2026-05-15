@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"heimdall/internal/knn"
@@ -10,13 +11,14 @@ import (
 
 type ReferenceIndex interface {
 	Len() int
+	KNNMode() string
 	FraudFraction(q *[reference.VectorDim]float64) float64
 	Warmup()
 	Close() error
 }
 
 type ReferenceIndexConfig struct {
-	// KNNMode "auto" (usa .ivf se existir), "ivf", ou "exact".
+	// KNNMode "auto" (usa .ivf se existir), "ivf" (exato se .ivf ausente), ou "exact".
 	KNNMode string
 	// IVFPath caminho do .ivf; vazio + modo ivf → mesmo diretório do .rbin com sufixo .ivf
 	IVFPath    string
@@ -54,13 +56,13 @@ func OpenReferenceIndex(refPath string, cfg ReferenceIndexConfig) (ReferenceInde
 			}
 		}
 		if mode == "auto" || mode == "ivf" {
-			ivf, err := reference.OpenMappedIVF(ivfPath)
+			ivf, err := openIVFIfPresent(ivfPath)
 			if err != nil {
 				if mode == "ivf" {
 					_ = m.Close()
 					return nil, fmt.Errorf("ivf %s: %w", ivfPath, err)
 				}
-			} else {
+			} else if ivf != nil {
 				if err := ivf.ValidateN(m.Len()); err != nil {
 					_ = ivf.Close()
 					_ = m.Close()
@@ -88,11 +90,31 @@ func OpenReferenceIndex(refPath string, cfg ReferenceIndexConfig) (ReferenceInde
 	return &hybridIndex{mem: recs}, nil
 }
 
+func openIVFIfPresent(ivfPath string) (*reference.MappedIVF, error) {
+	if ivfPath == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(ivfPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return reference.OpenMappedIVF(ivfPath)
+}
+
 func (h *hybridIndex) Len() int {
 	if h.mmap != nil {
 		return h.mmap.Len()
 	}
 	return len(h.mem)
+}
+
+func (h *hybridIndex) KNNMode() string {
+	if h.ivf != nil && h.mode == "ivf" {
+		return "ivf"
+	}
+	return "exact"
 }
 
 func (h *hybridIndex) FraudFraction(q *[reference.VectorDim]float64) float64 {

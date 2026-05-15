@@ -60,7 +60,11 @@ func main() {
 		log.Error("referências", "path", refPath, "err", err)
 		os.Exit(1)
 	}
-	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode)
+	effective := idx.KNNMode()
+	if knnMode == "ivf" && effective != "ivf" {
+		log.Warn("REFERENCE_IVF ausente ou inválido; usando KNN exato", "ivf", ivfPathFor(refPath, getenv("REFERENCE_IVF_PATH", "")))
+	}
+	log.Info("referências prontas", "n", idx.Len(), "knn_mode", knnMode, "knn_effective", effective)
 
 	if getenv("WARMUP", "1") == "1" {
 		t0 := time.Now()
@@ -185,6 +189,17 @@ func waitShutdown(srv *http.Server, log *slog.Logger, unixPath string) {
 			log.Warn("remover socket unix", "path", unixPath, "err", err)
 		}
 	}
+}
+
+func ivfPathFor(refPath, explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	lower := strings.ToLower(refPath)
+	if i := strings.LastIndex(lower, ".rbin"); i >= 0 {
+		return refPath[:i] + ".ivf"
+	}
+	return refPath + ".ivf"
 }
 
 func pickReferencePath(refPath string, log *slog.Logger) string {
