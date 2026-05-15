@@ -1,4 +1,4 @@
-﻿services:
+services:
   lb:
     image: haproxy:2.8-alpine
     platform: linux/amd64
@@ -17,12 +17,14 @@
           memory: "32M"
 
   api-1:
-    build: .
+    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-1.sock"
-      REFERENCE_PATH: /data/references.rbin
-      REFERENCE_IVF_PATH: /data/references.ivf
+      # Na submission, os dados estão embedados na imagem em /app/data
+      # (sem bind mount de ./data, que só existe no dev local).
+      REFERENCE_PATH: /app/data/references.rbin
+      REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
       KNN_NPROBE: "12"
@@ -40,7 +42,6 @@
       WARMUP: "1"
       METRICS: "0"
     volumes:
-      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
@@ -49,12 +50,14 @@
           memory: "159M"
 
   api-2:
-    build: .
+    image: peregrinno/heimdall@sha256:ea1bc3b67d35f864aa018d457c9a2fc5594c51a24e0d49695721aee99484b23e
     platform: linux/amd64
     environment:
       LISTEN: "unix:/run/sockets/api-2.sock"
-      REFERENCE_PATH: /data/references.rbin
-      REFERENCE_IVF_PATH: /data/references.ivf
+      # Na submission, os dados estão embedados na imagem em /app/data
+      # (sem bind mount de ./data, que só existe no dev local).
+      REFERENCE_PATH: /app/data/references.rbin
+      REFERENCE_IVF_PATH: /app/data/references.ivf
       DATA_DIR: /app/data
       KNN_MODE: "ivf"
       KNN_NPROBE: "12"
@@ -72,7 +75,6 @@
       WARMUP: "1"
       METRICS: "0"
     volumes:
-      - ./data:/data:ro
       - lb_sockets:/run/sockets
     deploy:
       resources:
@@ -92,7 +94,7 @@
       READY_SLEEP: "0.25"
       WARMUP_ROUNDS: "120"
     volumes:
-      # Bind do diretÃ³rio (nÃ£o do arquivo Ãºnico) Ã© mais estÃ¡vel no Windows.
+      # Bind do diretório (não do arquivo único) é mais estável no Windows.
       - ./scripts:/scripts:ro
     depends_on:
       - lb
