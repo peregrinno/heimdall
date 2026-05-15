@@ -85,6 +85,9 @@ func OpenMappedRBin(path string) (*MappedRBin, error) {
 		_ = mm.Unmap()
 		return nil, err
 	}
+	// Acesso por IVF é aleatório (vetores espalhados em ~192 MB).
+	// MADV_RANDOM desliga readahead e reduz pressão no page cache.
+	adviseRandom([]byte(mm))
 	return m, nil
 }
 

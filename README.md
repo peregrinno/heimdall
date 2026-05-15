@@ -167,7 +167,25 @@ Histórico real em testes locais com o `test.js` oficial:
 | IVF 512, maxCand=15 k | 463 ms | 1301 | **2046** |
 | IVF 512, maxCand=8 k + JSON otimizado | 4 ms | 1301 | **3694** |
 | IVF 2048, maxCand=14 k + warmup grande | 693 ms (page faults) | 2609 | **2768** |
-| **IVF 2048, maxCand=10 k + warmup só `.ivf` + GOGC=200** | — | — | **alvo: 4500–5500** |
+| Imagem antiga/cache (binário inconsistente) | 157 ms | -3000 | **-2198** |
+| **IVF 2048, maxCand=10 k, nprobe 16, digest pinado** | 460 ms | 2603 | **2940** |
+| **+ madvise + pre-touch rbin + GOMAXPROCS=2 + maxCand 4 k + nprobe 12** | alvo <100 ms | ~2400 | **alvo 5000+** |
+
+### Por que p99 alto na Rinha vs p99 baixo local
+
+Localmente o `.rbin` (192 MB) cabe inteiro no page cache e cada query toca ~10 k vetores
+quase sem I/O. Na Rinha, o host divide o cache entre muitos containers concorrentes e o
+acesso por IVF é **aleatório** em 192 MB → page faults dominam o p99.
+
+Mitigações aplicadas:
+
+- `madvise(MADV_RANDOM)` no `.rbin` desliga readahead inútil.
+- `madvise(MADV_WILLNEED)` no `.ivf` (12 MB) mantém centróides + postings residentes.
+- Warmup faz **pre-touch leve** (1 byte por página) do `.rbin` para reduzir o pico inicial.
+- `KNN_IVF_MAX_CANDIDATES=4000` (em vez de 10 k) corta o número de páginas tocadas por
+  query — a detecção já estava com 0,02 % de erro, sobra muita folga.
+- `GOMAXPROCS=2` evita enfileiramento sob 900 req/s com `cpus: "0.45"` por API.
+- HAProxy com `nbthread 1` (sob `cpus: "0.10"` 2 threads competem, não somam).
 
 ---
 

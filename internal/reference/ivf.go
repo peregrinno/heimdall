@@ -47,6 +47,9 @@ func OpenMappedIVF(path string) (*MappedIVF, error) {
 		_ = mm.Unmap()
 		return nil, err
 	}
+	// IVF é pequeno (~12 MB) e percorrido inteiro a cada query (centroides + postings).
+	// MADV_WILLNEED orienta o kernel a manter as páginas residentes.
+	adviseWillNeed([]byte(mm))
 	return m, nil
 }
 

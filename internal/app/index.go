@@ -128,27 +128,39 @@ func (h *hybridIndex) FraudFraction(q *[reference.VectorDim]float64) float64 {
 }
 
 func (h *hybridIndex) Warmup() {
-	if h.ivf == nil {
-		return
+	if h.ivf != nil {
+		cents := h.ivf.Centroids()
+		var fs float32
+		for i := 0; i < len(cents); i++ {
+			fs += cents[i]
+		}
+		offs := h.ivf.PostingOffsets()
+		var u uint32
+		for i := 0; i < len(offs); i++ {
+			u ^= offs[i]
+		}
+		posts := h.ivf.Postings()
+		var p uint32
+		for i := 0; i < len(posts); i++ {
+			p ^= posts[i]
+		}
+		_ = fs
+		_ = u
+		_ = p
 	}
-	cents := h.ivf.Centroids()
-	var fs float32
-	for i := 0; i < len(cents); i++ {
-		fs += cents[i]
+	// Pre-touch leve do .rbin: lê 1 byte por página de 4 KiB.
+	// Sob limite de memória, isso popula o page cache do kernel sem inflar RSS
+	// de forma anônima e elimina o pico inicial de page faults sob carga.
+	// Custo: ~50ms para 192 MB; ganho: p99 inicial muito menor.
+	if h.mmap != nil {
+		raw := h.mmap.Raw()
+		const pageSize = 4096
+		var acc byte
+		for i := 0; i < len(raw); i += pageSize {
+			acc ^= raw[i]
+		}
+		_ = acc
 	}
-	offs := h.ivf.PostingOffsets()
-	var u uint32
-	for i := 0; i < len(offs); i++ {
-		u ^= offs[i]
-	}
-	posts := h.ivf.Postings()
-	var p uint32
-	for i := 0; i < len(posts); i++ {
-		p ^= posts[i]
-	}
-	_ = fs
-	_ = u
-	_ = p
 }
 
 func (h *hybridIndex) Close() error {
