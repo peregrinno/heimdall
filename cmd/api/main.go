@@ -28,7 +28,6 @@ const (
 	defaultMinReferences   = 2_000_000
 )
 
-// version é injetada no build de produção (-ldflags "-X main.version=...").
 var version = "dev"
 
 func main() {
@@ -95,11 +94,6 @@ func main() {
 		}
 	}
 
-	// Após o warmup, força um GC final para limpar lixo de startup
-	// e (opcionalmente) desliga o GC automático em troca de GC periódico.
-	// O hot path do handler usa sync.Pool e tem alocações mínimas, então
-	// rodar GC entre rajadas (a cada 5s) é mais barato que pausas STW
-	// imprevisíveis de 50–500 µs no meio de um request.
 	runtime.GC()
 	if os.Getenv("HEIMDALL_DISABLE_GC") == "1" {
 		debug.SetGCPercent(-1)

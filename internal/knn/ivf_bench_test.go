@@ -12,9 +12,6 @@ import (
 	"heimdall/internal/vector"
 )
 
-// BenchmarkFraudFractionRBinIVF reproduz o caminho hot do handler em produção:
-// rbin mmap + IVF mmap, FraudFractionRBinIVF com nprobe/maxCand do compose.
-// É a base do perfil PGO consumido pelo build de produção (-pgo=auto).
 func BenchmarkFraudFractionRBinIVF(b *testing.B) {
 	const n = 100_000
 	const nList = 64
@@ -70,7 +67,6 @@ func makeBenchQueries(tb testing.TB, n int) [][reference.VectorDim]float64 {
 	return qs
 }
 
-// silencia "declared and not used" se makeSyntheticRBin estiver sem uso noutro arquivo
 var _ = math.Float32bits
 var _ = binary.LittleEndian
 var _ = vector.PartitionKey

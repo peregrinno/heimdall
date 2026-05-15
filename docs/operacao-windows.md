@@ -10,7 +10,7 @@ Sumário:
 3. [Ciclo de desenvolvimento local](#3-ciclo-de-desenvolvimento-local)
 4. [Regenerar o perfil PGO](#4-regenerar-o-perfil-pgo)
 5. [Publicar imagem no Docker Hub](#5-publicar-imagem-no-docker-hub)
-6. [Atualizar a branch `submission](#6-atualizar-a-branch-submission)`
+6. [Atualizar a branch `submission`](#6-atualizar-a-branch-submission)
 7. [Validar localmente com k6 oficial](#7-validar-localmente-com-k6-oficial)
 8. [Solução de problemas frequentes](#8-solução-de-problemas-frequentes)
 
@@ -18,14 +18,12 @@ Sumário:
 
 ## 1. Pré-requisitos
 
-
-| Ferramenta     | Versão mínima    | Verificar        |
-| -------------- | ---------------- | ---------------- |
-| Go             | 1.23             | `go version`     |
+| Ferramenta | Versão mínima | Verificar |
+|-----------|---------------|-----------|
+| Go | 1.23 | `go version` |
 | Docker Desktop | 4.x com BuildKit | `docker version` |
-| Git            | qualquer         | `git --version`  |
-| k6 (opcional)  | 0.50+            | `k6 version`     |
-
+| Git | qualquer | `git --version` |
+| k6 (opcional) | 0.50+ | `k6 version` |
 
 Login no Docker Hub (uma vez por máquina):
 
@@ -45,7 +43,7 @@ $env:GOTOOLCHAIN = "local"
 
 ## 2. Gerar dataset (uma vez)
 
-Os ficheiros `data/references.rbin` (~~192 MB) e `data/references.ivf` (~~12 MB)
+Os ficheiros `data/references.rbin` (~192 MB) e `data/references.ivf` (~12 MB)
 **não** estão versionados. Precisam ser gerados a partir de
 `data/references.json.gz` (baixado do repo oficial da Rinha).
 
@@ -72,7 +70,7 @@ Verificar:
 "{0:N0} bytes ivf"  -f (Get-Item data/references.ivf).Length
 ```
 
-Esperado: ~`192.000.196 bytes rbin `e ~`12.122.948 bytes ivf` (2048 listas).
+Esperado: ~`192.000.196 bytes rbin` e ~`12.122.948 bytes ivf` (2048 listas).
 
 ---
 
@@ -168,7 +166,6 @@ A imagem `peregrinno/heimdall:latest` **precisa** conter `references.rbin` e
 ```
 
 O script:
-
 - valida pré-requisitos (rbin, ivf, default.pgo),
 - builda `--no-cache` com `GOAMD64=v3 -pgo=auto`,
 - faz push,
@@ -247,18 +244,21 @@ Na pasta `..\heimdall-submission\`:
 
 1. Editar `docker-compose.yml`: trocar o `sha256:...` antigo pelo novo.
 2. Copiar ficheiros suportes recém-modificados na `main`:
-  ```powershell
+
+   ```powershell
    cd ..\heimdall-submission
    Copy-Item ..\heimdall\scripts\warmup.sh   .\scripts\warmup.sh   -Force
    Copy-Item ..\heimdall\deploy\haproxy.cfg  .\deploy\haproxy.cfg  -Force
-  ```
+   ```
+
 3. Commit + push:
-  ```powershell
+
+   ```powershell
    git add .
    git commit -m "submission: pin image @ <commit_curto> + tunings"
    git push origin submission
    cd ..\heimdall
-  ```
+   ```
 
 ### 6.4 Automatizar só o pin de digest (opcional)
 
@@ -306,34 +306,28 @@ Estas envs controlam o comportamento do binário em produção. Os defaults em
 
 ### 8.1 KNN
 
-
-| Variável                 | Default | Função                                                                                |
-| ------------------------ | ------- | ------------------------------------------------------------------------------------- |
-| `KNN_MODE`               | `ivf`   | `ivf` força IVF; `exact` força scan completo; `auto` cai para exato se `.ivf` ausente |
-| `KNN_NPROBE`             | `12`    | Número de listas IVF percorridas por query. ↑ = mais precisão, mais latência          |
-| `KNN_IVF_MAX_CANDIDATES` | `4000`  | Candidatos máximos rerankeados após IVF. ↑ = mais precisão, mais alloc                |
-
+| Variável | Default | Função |
+|----------|---------|--------|
+| `KNN_MODE` | `ivf` | `ivf` força IVF; `exact` força scan completo; `auto` cai para exato se `.ivf` ausente |
+| `KNN_NPROBE` | `12` | Número de listas IVF percorridas por query. ↑ = mais precisão, mais latência |
+| `KNN_IVF_MAX_CANDIDATES` | `4000` | Candidatos máximos rerankeados após IVF. ↑ = mais precisão, mais alloc |
 
 ### 8.2 Runtime Go
 
-
-| Variável                   | Default     | Função                                                                |
-| -------------------------- | ----------- | --------------------------------------------------------------------- |
-| `GOMAXPROCS`               | `2`         | Threads do runtime. Para 0.45 CPU, 2 evita travas de scheduler        |
-| `GOGC`                     | `200`       | % de heap antes de GC automático. Só usado se `HEIMDALL_DISABLE_GC=0` |
-| `HEIMDALL_MEM_LIMIT_BYTES` | `120000000` | `debug.SetMemoryLimit`. Mantém heap abaixo do limite do container     |
-| `HEIMDALL_DISABLE_GC`      | `1`         | Se `1`, desliga GC automático e usa GC periódico manual               |
-| `HEIMDALL_GC_INTERVAL_SEC` | `5`         | Intervalo do `runtime.GC()` periódico quando o automático está off    |
-
+| Variável | Default | Função |
+|----------|---------|--------|
+| `GOMAXPROCS` | `2` | Threads do runtime. Para 0.45 CPU, 2 evita travas de scheduler |
+| `GOGC` | `200` | % de heap antes de GC automático. Só usado se `HEIMDALL_DISABLE_GC=0` |
+| `HEIMDALL_MEM_LIMIT_BYTES` | `120000000` | `debug.SetMemoryLimit`. Mantém heap abaixo do limite do container |
+| `HEIMDALL_DISABLE_GC` | `1` | Se `1`, desliga GC automático e usa GC periódico manual |
+| `HEIMDALL_GC_INTERVAL_SEC` | `5` | Intervalo do `runtime.GC()` periódico quando o automático está off |
 
 ### 8.3 Load shedding (Etapa 4)
 
-
-| Variável                   | Default | Função                                                           |
-| -------------------------- | ------- | ---------------------------------------------------------------- |
-| `HEIMDALL_SHED_SLOTS`      | `32`    | Requests simultâneas aceitas em `/fraud-score`. `0` = sem limite |
-| `HEIMDALL_SHED_TIMEOUT_MS` | `3`     | Tempo máximo aguardando slot livre antes de responder `503`      |
-
+| Variável | Default | Função |
+|----------|---------|--------|
+| `HEIMDALL_SHED_SLOTS` | `32` | Requests simultâneas aceitas em `/fraud-score`. `0` = sem limite |
+| `HEIMDALL_SHED_TIMEOUT_MS` | `3` | Tempo máximo aguardando slot livre antes de responder `503` |
 
 Por que isso ajuda: sob rajada (k6 sobe para 100 VUs em < 1 s), preferimos
 devolver `503` para o excesso e manter o p99 baixo nos requests aceitos. O k6
@@ -395,6 +389,25 @@ if (Test-Path cmd\api\default) { Move-Item cmd\api\default cmd\api\default.pgo -
 ### 9.7 `docker compose` não acha o `scripts/warmup.sh` na `submission`
 
 A branch `submission` precisa do script copiado (ver **§6.2** passo 2).
+
+### 9.8 `warmup-1 | /warmup.sh: set: line 7: illegal option -`
+
+Causa: Docker Desktop no Windows às vezes injeta CRLF em **bind mounts de
+arquivo único**, mesmo quando o arquivo no disco está em LF. O `\r` final
+faz o shell ver `set -eu\r` como flag inválida.
+
+Corrigido permanentemente por três medidas combinadas (já no repo):
+
+1. `.gitattributes` força `*.sh text eol=lf`.
+2. `docker-compose.yml` monta o **diretório** `./scripts:/scripts:ro` em vez
+   do arquivo único `./scripts/warmup.sh:/warmup.sh:ro`.
+3. O entrypoint do warmup é `["/bin/sh", "-e", "/scripts/warmup.sh"]` — o
+   `-e` na linha de comando dispensa o `set -e` dentro do script.
+
+Se um script novo aparecer com esse erro, garanta que:
+- ele está coberto por algum padrão em `.gitattributes`,
+- está sendo lido de um bind mount de diretório,
+- e roda com `sh -e` (ou tem `set -e` em LF puro).
 
 ---
 
@@ -466,4 +479,3 @@ git push origin submission
 cd ..\heimdall
 git push origin main
 ```
-

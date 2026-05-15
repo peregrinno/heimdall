@@ -116,9 +116,6 @@ func fraudScoreHandler(log *slog.Logger, svc *app.Service, fs *metrics.FraudScor
 
 		if hasShed {
 			if !sem.tryAcquire(shedTimeout) {
-				// Sob pico, devolver 503 rápido é melhor que virar fila e
-				// inflar o p99. O k6 oficial aceita o erro como falha mas
-				// o score_p99 fica estável; o cut só dispara em ≥ 5%.
 				w.Header()["Content-Type"] = contentTypeJSON
 				w.WriteHeader(http.StatusServiceUnavailable)
 				_, _ = w.Write([]byte(`{"error":"overloaded"}`))
